@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.FaceVerifyKiosk" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/teal</item>
+        <item name="colorPrimaryVariant">@color/ink_soft</item>
+        <item name="colorSecondary">@color/amber</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorOnSecondary">@color/ink</item>
+        <item name="android:statusBarColor">@color/ink</item>
+        <item name="android:navigationBarColor">@color/ink</item>
+        <item name="android:windowBackground">@color/ink</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="materialButtonStyle">@style/Widget.FaceVerify.Button</item>
+        <item name="textInputStyle">@style/Widget.FaceVerify.TextInput</item>
+    </style>
+
+    <style name="Widget.FaceVerify.Button" parent="Widget.MaterialComponents.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0.02</item>
+        <item name="cornerRadius">14dp</item>
+        <item name="backgroundTint">@color/teal</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingLeft">20dp</item>
+        <item name="android:paddingRight">20dp</item>
+    </style>
+
+    <style name="Widget.FaceVerify.Button.Ghost" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="strokeColor">@color/mist_dim</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cornerRadius">14dp</item>
+        <item name="android:textColor">@color/mist</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="rippleColor">@color/teal_bright</item>
+    </style>
+
+    <style name="Widget.FaceVerify.TextInput" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxBackgroundColor">@color/field_bg</item>
+        <item name="boxStrokeColor">@color/teal</item>
+        <item name="hintTextColor">@color/mist_dim</item>
+        <item name="android:textColorHint">@color/mist_dim</item>
+    </style>
+
+    <style name="Text.FaceVerify.Brand" parent="TextAppearance.MaterialComponents.Headline5">
+        <item name="android:textColor">@color/mist</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Text.FaceVerify.Status" parent="TextAppearance.MaterialComponents.Headline4">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textSize">34sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="Text.FaceVerify.Hint" parent="TextAppearance.MaterialComponents.Body1">
+        <item name="android:textColor">@color/mist_dim</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingExtra">4dp</item>
+    </style>
+</resources>

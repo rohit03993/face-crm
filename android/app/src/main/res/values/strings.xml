@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Face Verify</string>
+    <string name="brand">Face Verify</string>
+    <string name="brand_tagline">Attendance gate</string>
+    <string name="waiting">Ready for card tap</string>
+    <string name="waiting_hint">Stand in the frame · look at the camera</string>
+    <string name="verifying">Checking face</string>
+    <string name="loading_model">Starting camera AI</string>
+    <string name="model_ready">Camera ready</string>
+    <string name="model_failed">Face model failed to load</string>
+    <string name="pass">Verified</string>
+    <string name="fail">Not matched</string>
+    <string name="settings">Settings</string>
+    <string name="enroll">Enroll</string>
+    <string name="save">Save settings</string>
+    <string name="api_base_url">API base URL</string>
+    <string name="device_id">Device ID</string>
+    <string name="device_token">Device token</string>
+    <string name="threshold">Match threshold</string>
+    <string name="capture">Capture</string>
+    <string name="upload_enroll">Upload</string>
+    <string name="student_id">Roll number</string>
+    <string name="ws_connected">Online</string>
+    <string name="ws_disconnected">Reconnecting…</string>
+    <string name="enroll_title">Student enrollment</string>
+    <string name="enroll_subtitle">Capture 5 clear angles of the face</string>
+    <string name="settings_title">Kiosk settings</string>
+    <string name="settings_subtitle">Usually only the API URL needs changing</string>
+    <string name="back">Back</string>
+</resources>

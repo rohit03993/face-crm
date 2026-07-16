@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Campus gate palette: deep slate + teal accent (not purple / not cream) -->
+    <color name="ink">#FF0B1220</color>
+    <color name="ink_soft">#FF141C2B</color>
+    <color name="slate">#FF243044</color>
+    <color name="mist">#FFE8EEF5</color>
+    <color name="mist_dim">#B3E8EEF5</color>
+    <color name="teal">#FF0F8A7A</color>
+    <color name="teal_bright">#FF1BB8A5</color>
+    <color name="amber">#FFE0A100</color>
+    <color name="pass">#FF1F8A5B</color>
+    <color name="pass_soft">#CC145C3E</color>
+    <color name="fail">#FFC23B3B</color>
+    <color name="fail_soft">#CC8F1F1F</color>
+    <color name="verify">#FF1A6F8C</color>
+    <color name="verify_soft">#CC0E4A5E</color>
+    <color name="scrim_top">#CC0B1220</color>
+    <color name="scrim_bottom">#E60B1220</color>
+    <color name="oval_stroke">#E6E8EEF5</color>
+    <color name="oval_stroke_dim">#66E8EEF5</color>
+    <color name="panel">#F2141C2B</color>
+    <color name="field_bg">#FF1A2436</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <!-- legacy aliases used in code -->
+    <color name="pass_green">@color/pass</color>
+    <color name="fail_red">@color/fail</color>
+    <color name="idle_blue">@color/teal</color>
+    <color name="overlay">@color/scrim_top</color>
+</resources>

@@ -1,0 +1,42 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: face-verify-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: face_verify
+      MYSQL_USER: face
+      MYSQL_PASSWORD: face
+    ports:
+      - "3307:3306"
+    volumes:
+      - face_verify_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: face-verify-api
+    restart: unless-stopped
+    env_file:
+      - ./api/.env
+    environment:
+      DATABASE_URL: mysql+pymysql://face:face@mysql:3306/face_verify
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api/storage:/app/storage
+      - insightface_models:/root/.insightface
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  face_verify_mysql:
+  insightface_models:

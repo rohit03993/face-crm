@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.env
+api/storage/
+api/.env
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/build/
+android/.idea/
+*.iml
+*.apk
+*.aab
+*.keystore
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Models / large binaries (download separately)
+*.onnx
+!android/app/src/main/assets/.gitkeep

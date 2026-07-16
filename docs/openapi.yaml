@@ -1,0 +1,117 @@
+openapi: 3.0.3
+info:
+  title: Face Verify API
+  version: 0.1.0
+  description: Face enrollment, verification broker, and CRM callback hub.
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+  /students:
+    post:
+      summary: Upsert student
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Student
+  /students/{student_id}/enroll:
+    post:
+      summary: Enroll face images (5-10)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                angles:
+                  type: string
+      responses:
+        "200":
+          description: Enrolled
+  /students/{student_id}/embedding:
+    get:
+      summary: Get stored embedding
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Embedding
+  /devices:
+    post:
+      summary: Register kiosk device
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Device
+    get:
+      summary: List devices
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Device list
+  /verification-requests:
+    post:
+      summary: Create pending verification (CRM after RFID)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Request created and pushed over WS when online
+  /verification-results:
+    post:
+      summary: Kiosk submits match result
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Resolved
+  /ws/kiosk/{device_id}:
+    get:
+      summary: WebSocket for kiosk (use WS upgrade)
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switching Protocols
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

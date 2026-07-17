@@ -18,10 +18,21 @@
 3. Rebuild the app.
 
 ## Configure
-Open **Settings**:
-- API base URL (`https://face.folksindia.org` on production)
-- Device ID (from `POST /devices`)
-- Device token
+Open **Settings** (defaults already set):
+- API base URL: `https://face.folksindia.org`
+- Device ID: `1001`
+- Device token: `48291573`
+
+Create the matching device on Face API once:
+
+```bash
+curl -sS -X POST "https://face.folksindia.org/devices" \
+  -H "Authorization: Bearer YOUR_CRM_SERVICE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"1001","name":"Main Gate Kiosk","gate":"main","token":"48291573"}'
+```
+
+Then set CRM `FACE_VERIFY_DEFAULT_DEVICE_ID=1001` (and biometric `face_verify_device_id` if using RFID gate mode).
 
 ## Modes
 - **Ready for punch:** continuous identify → `POST /camera-identify` → CRM punch  

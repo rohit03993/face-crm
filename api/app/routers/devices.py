@@ -14,7 +14,15 @@ def create_device(body: DeviceCreate, db: Session = Depends(get_db)) -> Device:
     token_hash = hash_token(body.token)
     if db.query(Device).filter(Device.token_hash == token_hash).first():
         raise HTTPException(status_code=400, detail="Token already registered")
-    device = Device(name=body.name, gate=body.gate, token_hash=token_hash)
+    device_id = (body.id or "").strip() or None
+    if device_id and db.get(Device, device_id):
+        raise HTTPException(status_code=400, detail=f"Device id {device_id} already exists")
+    device = Device(
+        id=device_id,
+        name=body.name,
+        gate=body.gate,
+        token_hash=token_hash,
+    ) if device_id else Device(name=body.name, gate=body.gate, token_hash=token_hash)
     db.add(device)
     db.commit()
     db.refresh(device)

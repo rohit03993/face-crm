@@ -187,19 +187,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setConnection(online: Boolean) {
-        binding.wsStatus.text = if (online) {
-            getString(R.string.ws_connected)
-        } else {
-            getString(R.string.ws_disconnected)
-        }
-        val color = ContextCompat.getColor(
-            this,
-            if (online) R.color.pass else R.color.fail,
-        )
-        binding.connectionDot.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(color)
-        }
+        ConnectionStatus.bind(binding.connectionDot, binding.wsStatus, online, this)
     }
 
     private enum class StatusTone { IDLE, VERIFY, PASS, FAIL }

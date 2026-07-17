@@ -147,9 +147,10 @@ class AttendanceActivity : AppCompatActivity() {
                                 setTone(Tone.PASS)
                                 feedback?.playPass(student)
                             }
-                            delay(2500)
+                            // Short success flash so the next student can punch quickly.
+                            delay(700)
                         }
-                        result.matched && result.alreadyProcessed -> delay(900)
+                        result.matched && result.alreadyProcessed -> delay(250)
                         result.matched -> {
                             withContext(Dispatchers.Main) {
                                 binding.statusBanner.text = getString(R.string.fail)
@@ -157,9 +158,9 @@ class AttendanceActivity : AppCompatActivity() {
                                     result.message ?: getString(R.string.attendance_not_recorded)
                                 setTone(Tone.FAIL)
                             }
-                            delay(1500)
+                            delay(800)
                         }
-                        else -> delay(450)
+                        else -> delay(150)
                     }
                 } catch (t: Throwable) {
                     if (t is CancellationException) throw t
@@ -170,11 +171,11 @@ class AttendanceActivity : AppCompatActivity() {
                         binding.statusHint.text = getString(R.string.api_retry)
                         setTone(Tone.FAIL)
                     }
-                    delay(2000)
+                    delay(1000)
                 }
 
                 withContext(Dispatchers.Main) { showIdle() }
-                delay(200)
+                delay(80)
             } finally {
                 identifyMutex.unlock()
             }
@@ -206,16 +207,7 @@ class AttendanceActivity : AppCompatActivity() {
     }
 
     private fun setOnline(online: Boolean) {
-        binding.wsStatus.text = if (online) {
-            getString(R.string.ws_connected)
-        } else {
-            getString(R.string.ws_disconnected)
-        }
-        val color = ContextCompat.getColor(this, if (online) R.color.pass else R.color.fail)
-        binding.connectionDot.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(color)
-        }
+        ConnectionStatus.bind(binding.connectionDot, binding.wsStatus, online, this)
     }
 
     private fun startCamera() {

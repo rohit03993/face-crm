@@ -95,6 +95,19 @@ class ArcFaceEmbedder(context: Context) : AutoCloseable {
             return FloatArray(v.size) { i -> v[i] / n }
         }
 
+        fun averageEmbeddings(embeddings: List<FloatArray>): FloatArray {
+            require(embeddings.isNotEmpty())
+            val dim = embeddings[0].size
+            val mean = FloatArray(dim)
+            for (emb in embeddings) {
+                require(emb.size == dim)
+                for (i in 0 until dim) mean[i] += emb[i]
+            }
+            val n = embeddings.size.toFloat()
+            for (i in 0 until dim) mean[i] /= n
+            return l2Normalize(mean)
+        }
+
         fun cosine(a: FloatArray, b: FloatArray): Float {
             require(a.size == b.size)
             var dot = 0.0

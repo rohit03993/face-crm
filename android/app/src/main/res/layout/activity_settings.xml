@@ -12,11 +12,45 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <TextView
-            style="@style/Text.FaceVerify.Brand"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/settings_title" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/Text.FaceVerify.Brand"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_title" />
+
+            <LinearLayout
+                android:id="@+id/connectionPill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_connection_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp">
+
+                <View
+                    android:id="@+id/connectionDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_dot" />
+
+                <TextView
+                    android:id="@+id/connectionStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/status_checking"
+                    android:textColor="@color/mist"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             style="@style/Text.FaceVerify.Hint"
@@ -47,12 +81,15 @@
             android:layout_marginTop="14dp"
             android:hint="@string/device_id"
             app:boxStrokeColor="@color/teal"
+            app:helperTextEnabled="true"
+            app:helperText="@string/device_id_hint"
             app:hintTextColor="@color/mist_dim">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/inputDeviceId"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:inputType="number"
                 android:textColor="@color/mist" />
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -62,13 +99,16 @@
             android:layout_marginTop="14dp"
             android:hint="@string/device_token"
             app:boxStrokeColor="@color/teal"
+            app:helperTextEnabled="true"
+            app:helperText="@string/device_token_hint"
+            app:endIconMode="password_toggle"
             app:hintTextColor="@color/mist_dim">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/inputDeviceToken"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textPassword"
+                android:inputType="numberPassword"
                 android:textColor="@color/mist" />
         </com.google.android.material.textfield.TextInputLayout>
 

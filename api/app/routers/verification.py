@@ -1,16 +1,17 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import logging
 import uuid
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth import require_crm_token, require_device
 from app.config import get_settings
 from app.crm_callback import notify_crm_camera_punch, notify_crm_pass
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.face_engine import decode_image_bytes
 from app.models import Device, FailCapture, FaceTemplate, Student, VerificationRequest, VerificationStatus
 from app.schemas import (
@@ -24,6 +25,40 @@ from app.ws_hub import hub
 
 router = APIRouter(tags=["verification"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+async def _background_crm_camera_punch(
+    *,
+    request_id: str,
+    student_id: str,
+    enrollment_number: str,
+    device_id: str,
+    score: float,
+) -> None:
+    """Punch CRM after the kiosk already got a fast match response."""
+    result = await notify_crm_camera_punch(
+        request_id=request_id,
+        student_id=student_id,
+        enrollment_number=enrollment_number,
+        device_id=device_id,
+        score=score,
+    )
+    db = SessionLocal()
+    try:
+        req = db.get(VerificationRequest, request_id)
+        if not req:
+            return
+        meta = dict(req.meta or {})
+        if result is None:
+            meta["crm_error"] = "crm_camera_punch_failed"
+            logger.error("Background CRM punch failed for %s", request_id)
+        else:
+            meta["crm_result"] = result
+        req.meta = meta
+        db.commit()
+    finally:
+        db.close()
 
 
 @router.post(
@@ -95,6 +130,7 @@ async def create_verification_request(
 @router.post("/camera-identify", response_model=CameraIdentifyOut)
 async def camera_identify(
     body: CameraIdentifyIn,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     device: Device = Depends(require_device),
 ) -> CameraIdentifyOut:
@@ -196,47 +232,33 @@ async def camera_identify(
             )
 
     request_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
     req = VerificationRequest(
         id=request_id,
         student_id=best_student.id,
         device_id=device.id,
-        status=VerificationStatus.PENDING,
+        status=VerificationStatus.PASS,
         score=best_score,
-        meta={"source": "camera_kiosk"},
-        resolved_at=None,
+        meta={"source": "camera_kiosk", "crm_pending": True},
+        resolved_at=now,
     )
     db.add(req)
     db.commit()
 
-    crm_result = await notify_crm_camera_punch(
+    # Return match to kiosk immediately; CRM punch runs in the background.
+    background_tasks.add_task(
+        _background_crm_camera_punch,
         request_id=request_id,
         student_id=best_student.id,
         enrollment_number=best_student.enrollment_number,
         device_id=device.id,
         score=best_score,
     )
-    if crm_result is None:
-        req.status = VerificationStatus.FAIL
-        req.resolved_at = datetime.now(timezone.utc)
-        req.meta = {
-            "source": "camera_kiosk",
-            "error": "crm_camera_punch_failed",
-        }
-        db.commit()
-        raise HTTPException(status_code=502, detail="CRM camera-punch callback failed")
-
-    req.status = VerificationStatus.PASS
-    req.resolved_at = datetime.now(timezone.utc)
-    req.meta = {
-        "source": "camera_kiosk",
-        "crm_result": crm_result,
-    }
-    db.commit()
 
     return CameraIdentifyOut(
         matched=True,
         attendance_recorded=True,
-        already_processed=bool(crm_result.get("already_processed", False)),
+        already_processed=False,
         student_id=best_student.id,
         enrollment_number=best_student.enrollment_number,
         name=best_student.name,

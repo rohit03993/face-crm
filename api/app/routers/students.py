@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 import cv2
@@ -9,15 +10,17 @@ from app.auth import require_crm_or_device, require_crm_token
 from app.config import get_settings
 from app.db import get_db
 from app.face_engine import average_embeddings, decode_image_bytes, extract_embedding
-from app.models import FaceImage, FaceTemplate, Student
+from app.models import FaceImage, FaceTemplate, FailCapture, Student, VerificationRequest
 from app.schemas import (
     EmbeddingOut,
     EnrollResponse,
+    EnrollTemplateIn,
     StudentBulkSyncIn,
     StudentBulkSyncOut,
     StudentCreate,
     StudentListItem,
     StudentOut,
+    StudentUpdate,
 )
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -104,16 +107,212 @@ def _upsert_student(body: StudentCreate, db: Session) -> Student:
     return student
 
 
+def _resolve_student(db: Session, student_id: str) -> Student:
+    student = db.get(Student, student_id)
+    if student is None:
+        enr = student_id.strip().upper()
+        student = db.query(Student).filter(Student.enrollment_number == enr).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
+
+
+def _clear_face_data(db: Session, student_id: str) -> None:
+    """Remove face images + templates for a student (DB rows and files on disk)."""
+    images = db.query(FaceImage).filter(FaceImage.student_id == student_id).all()
+    for img in images:
+        try:
+            Path(img.path).unlink(missing_ok=True)
+        except OSError:
+            pass
+        db.delete(img)
+    db.query(FaceTemplate).filter(FaceTemplate.student_id == student_id).delete()
+    face_dir = Path(settings.faces_dir) / student_id
+    if face_dir.exists():
+        shutil.rmtree(face_dir, ignore_errors=True)
+
+
+def _apply_student_update(student: Student, body: StudentUpdate, db: Session) -> Student:
+    if body.name is not None:
+        student.name = body.name.strip()
+    if body.batch is not None:
+        student.batch = body.batch.strip() or None
+    if body.enrollment_number is not None:
+        new_enr = body.enrollment_number.strip().upper()
+        clash = (
+            db.query(Student)
+            .filter(Student.enrollment_number == new_enr, Student.id != student.id)
+            .first()
+        )
+        if clash:
+            raise HTTPException(status_code=409, detail="Enrollment number already in use")
+        student.enrollment_number = new_enr
+    return student
+
+
+def _delete_student_cascade(db: Session, student: Student) -> None:
+    sid = student.id
+    req_ids = [
+        rid
+        for (rid,) in db.query(VerificationRequest.id)
+        .filter(VerificationRequest.student_id == sid)
+        .all()
+    ]
+    if req_ids:
+        db.query(FailCapture).filter(FailCapture.request_id.in_(req_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(VerificationRequest).filter(VerificationRequest.student_id == sid).delete(
+            synchronize_session=False
+        )
+    _clear_face_data(db, sid)
+    db.delete(student)
+
+
+def _save_phone_template(
+    db: Session,
+    *,
+    student_key: str,
+    body: EnrollTemplateIn,
+) -> EnrollResponse:
+    if body.model_version != settings.face_model_version:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Model mismatch: kiosk={body.model_version}, "
+                f"server={settings.face_model_version}"
+            ),
+        )
+
+    emb = np.asarray(body.embedding, dtype=np.float32)
+    if emb.shape != (settings.embedding_dim,) or not np.all(np.isfinite(emb)):
+        raise HTTPException(status_code=422, detail="Invalid embedding")
+    norm = float(np.linalg.norm(emb))
+    if norm < 1e-6:
+        raise HTTPException(status_code=422, detail="Zero embedding")
+    emb = (emb / norm).astype(np.float32)
+
+    student = db.get(Student, student_key)
+    if student is None:
+        enr = student_key.strip().upper()
+        student = db.query(Student).filter(Student.enrollment_number == enr).first()
+    if not student:
+        enr = (body.enrollment_number or student_key).strip().upper()
+        if not enr:
+            raise HTTPException(status_code=404, detail="Student not found")
+        display_name = (body.name or enr).strip() or enr
+        student = Student(enrollment_number=enr, name=display_name)
+        db.add(student)
+        db.flush()
+    elif body.name and body.name.strip() and student.name != body.name.strip():
+        student.name = body.name.strip()
+
+    sid = student.id
+    _clear_face_data(db, sid)
+    db.flush()
+
+    template = FaceTemplate(
+        student_id=sid,
+        embedding=emb.tolist(),
+        model_version=settings.face_model_version,
+        image_count=body.image_count,
+    )
+    db.add(template)
+    db.commit()
+
+    return EnrollResponse(
+        student_id=sid,
+        model_version=settings.face_model_version,
+        image_count=body.image_count,
+        embedding_dim=settings.embedding_dim,
+    )
+
+
+# --- Device-friendly POST routes (some networks block PATCH/DELETE) ---
+
+
+@router.post("/enroll-template", response_model=EnrollResponse)
+def enroll_template_collection(
+    body: EnrollTemplateIn,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> EnrollResponse:
+    key = (body.student_id or body.enrollment_number or "").strip()
+    if not key:
+        raise HTTPException(status_code=422, detail="student_id or enrollment_number required")
+    return _save_phone_template(db, student_key=key, body=body)
+
+
+@router.post("/{student_id}/update", response_model=StudentOut)
+def update_student_post(
+    student_id: str,
+    body: StudentUpdate,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> Student:
+    student = _resolve_student(db, student_id)
+    _apply_student_update(student, body, db)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@router.post("/{student_id}/remove", status_code=status.HTTP_200_OK)
+def remove_student_post(
+    student_id: str,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> dict:
+    student = _resolve_student(db, student_id)
+    sid = student.id
+    _delete_student_cascade(db, student)
+    db.commit()
+    return {"ok": True, "deleted": sid}
+
+
 @router.get("/{student_id}", response_model=StudentOut)
 def get_student(
     student_id: str,
     db: Session = Depends(get_db),
     _auth=Depends(require_crm_or_device),
 ) -> Student:
-    student = db.get(Student, student_id)
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
+    return _resolve_student(db, student_id)
+
+
+@router.patch("/{student_id}", response_model=StudentOut)
+def update_student(
+    student_id: str,
+    body: StudentUpdate,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> Student:
+    student = _resolve_student(db, student_id)
+    _apply_student_update(student, body, db)
+    db.commit()
+    db.refresh(student)
     return student
+
+
+@router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_student(
+    student_id: str,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> None:
+    student = _resolve_student(db, student_id)
+    _delete_student_cascade(db, student)
+    db.commit()
+
+
+@router.post("/{student_id}/enroll-template", response_model=EnrollResponse)
+def enroll_student_template(
+    student_id: str,
+    body: EnrollTemplateIn,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> EnrollResponse:
+    """Store a phone-computed face template only (no InsightFace, no image files)."""
+    return _save_phone_template(db, student_key=student_id, body=body)
 
 
 @router.post("/{student_id}/enroll", response_model=EnrollResponse)
@@ -147,6 +346,10 @@ async def enroll_student(
 
     if len(images) < 3 or len(images) > 6:
         raise HTTPException(status_code=400, detail="Provide 3–6 face images")
+
+    # Re-enroll replaces previous face photos/templates for this student.
+    _clear_face_data(db, student_id)
+    db.flush()
 
     angle_list = [a.strip() for a in angles.split(",")] if angles else []
     embeddings: list[np.ndarray] = []

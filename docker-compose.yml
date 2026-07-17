@@ -31,8 +31,19 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./api/storage:/app/storage
+      # Mount source so edit/delete/enroll routes update without rebuilding every time
+      - ./api:/app
       - insightface_models:/root/.insightface
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
     depends_on:
       mysql:
         condition: service_healthy

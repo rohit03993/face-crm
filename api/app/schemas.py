@@ -20,6 +20,12 @@ class StudentCreate(BaseModel):
     id: str | None = None
 
 
+class StudentUpdate(BaseModel):
+    enrollment_number: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    batch: str | None = None
+
+
 class StudentOut(BaseModel):
     id: str
     enrollment_number: str
@@ -57,6 +63,17 @@ class EmbeddingOut(BaseModel):
     image_count: int
 
 
+class EnrollTemplateIn(BaseModel):
+    """Phone-computed ArcFace template — no bulky face images on the server."""
+    embedding: list[float] = Field(..., min_length=512, max_length=512)
+    model_version: str
+    image_count: int = Field(..., ge=1, le=6)
+    name: str | None = None
+    # Optional when using POST /students/enroll-template (collection route).
+    student_id: str | None = None
+    enrollment_number: str | None = None
+
+
 class EnrollResponse(BaseModel):
     student_id: str
     model_version: str
@@ -67,7 +84,9 @@ class EnrollResponse(BaseModel):
 class DeviceCreate(BaseModel):
     name: str
     gate: str | None = None
-    token: str = Field(..., min_length=8)
+    # Optional short numeric id (e.g. "1001") — easier to type on the kiosk than a UUID.
+    id: str | None = Field(default=None, min_length=1, max_length=36, pattern=r"^[0-9A-Za-z_-]+$")
+    token: str = Field(..., min_length=6, max_length=64)
 
 
 class DeviceOut(BaseModel):

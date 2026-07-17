@@ -9,12 +9,14 @@ import com.school.faceverify.R
 import com.school.faceverify.databinding.ActivityHomeBinding
 import com.school.faceverify.net.FaceApiClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class HomeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHomeBinding
+    private var statusJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +37,16 @@ class HomeActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshSummary()
+        statusJob?.cancel()
+        statusJob = ConnectionStatus.startPolling(this) { online ->
+            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
+        }
+    }
+
+    override fun onPause() {
+        statusJob?.cancel()
+        statusJob = null
+        super.onPause()
     }
 
     private fun refreshSummary() {
@@ -50,17 +62,8 @@ class HomeActivity : AppCompatActivity() {
                     enrolled,
                     students.size,
                 )
-                val healthy = withContext(Dispatchers.IO) {
-                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).health()
-                }
-                binding.apiStatus.text = if (healthy) {
-                    getString(R.string.api_online)
-                } else {
-                    getString(R.string.api_offline)
-                }
             } catch (_: Exception) {
                 binding.studentsSummary.text = getString(R.string.students_menu_hint)
-                binding.apiStatus.text = getString(R.string.api_offline)
             }
         }
     }

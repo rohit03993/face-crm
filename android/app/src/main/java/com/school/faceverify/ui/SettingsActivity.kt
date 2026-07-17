@@ -8,11 +8,13 @@ import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.data.KioskConfig
 import com.school.faceverify.databinding.ActivitySettingsBinding
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySettingsBinding
+    private var statusJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,5 +55,19 @@ class SettingsActivity : AppCompatActivity() {
         binding.btnOpenRfid.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        statusJob?.cancel()
+        statusJob = ConnectionStatus.startPolling(this) { online ->
+            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
+        }
+    }
+
+    override fun onPause() {
+        statusJob?.cancel()
+        statusJob = null
+        super.onPause()
     }
 }

@@ -11,14 +11,48 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingHorizontal="24dp"
-        android:paddingTop="36dp"
+        android:paddingTop="28dp"
         android:paddingBottom="32dp">
 
-        <TextView
-            style="@style/Text.FaceVerify.Brand"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/brand" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/Text.FaceVerify.Brand"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/brand" />
+
+            <LinearLayout
+                android:id="@+id/connectionPill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_connection_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp">
+
+                <View
+                    android:id="@+id/connectionDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/bg_dot" />
+
+                <TextView
+                    android:id="@+id/connectionStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/status_checking"
+                    android:textColor="@color/mist"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             style="@style/Text.FaceVerify.Hint"
@@ -26,7 +60,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/home_subtitle"
-            android:textSize="18sp" />
+            android:textSize="17sp" />
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardAttendance"
@@ -49,18 +83,18 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
                     android:text="@string/ready_for_punch"
                     android:textColor="@color/white"
-                    android:textSize="24sp"
-                    android:fontFamily="sans-serif-medium" />
+                    android:textSize="24sp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:alpha="0.9"
                     android:text="@string/ready_for_punch_hint"
                     android:textColor="@color/white"
-                    android:alpha="0.9"
                     android:textSize="15sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -75,9 +109,9 @@
             app:cardBackgroundColor="@color/ink_soft"
             app:cardCornerRadius="20dp"
             app:cardElevation="0dp"
+            app:rippleColor="@color/teal_bright"
             app:strokeColor="@color/slate"
-            app:strokeWidth="1dp"
-            app:rippleColor="@color/teal_bright">
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -88,10 +122,10 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
                     android:text="@string/students_menu"
                     android:textColor="@color/mist"
-                    android:textSize="20sp"
-                    android:fontFamily="sans-serif-medium" />
+                    android:textSize="20sp" />
 
                 <TextView
                     android:id="@+id/studentsSummary"
@@ -111,15 +145,5 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
             android:text="@string/settings" />
-
-        <TextView
-            android:id="@+id/apiStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:gravity="center"
-            android:textColor="@color/mist_dim"
-            android:textSize="13sp"
-            android:text="@string/checking_api" />
     </LinearLayout>
 </ScrollView>

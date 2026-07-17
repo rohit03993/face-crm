@@ -50,10 +50,22 @@ def decode_image_bytes(data: bytes) -> np.ndarray:
     return img
 
 
+def downscale_for_detect(img_bgr: np.ndarray, max_side: int = 960) -> np.ndarray:
+    """Shrink large frames before detect — speeds enroll without hurting ArcFace quality."""
+    h, w = img_bgr.shape[:2]
+    side = max(h, w)
+    if side <= max_side:
+        return img_bgr
+    scale = max_side / float(side)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    return cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
 def extract_embedding(img_bgr: np.ndarray) -> np.ndarray:
     """Detect largest face, return L2-normalized 512-d ArcFace embedding."""
     app = get_face_app()
-    faces = app.get(img_bgr)
+    faces = app.get(downscale_for_detect(img_bgr))
     if not faces:
         raise ValueError("No face detected")
     face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))

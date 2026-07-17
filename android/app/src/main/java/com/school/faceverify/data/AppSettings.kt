@@ -21,10 +21,10 @@ data class KioskConfig(
     val cameraAttendanceMode: Boolean = false,
 ) {
     companion object {
-        // Demo seed values from api/scripts/seed_demo.py — change only if you re-seed.
-        const val DEFAULT_API_URL = "http://192.168.1.5:8000"
-        const val DEFAULT_DEVICE_ID = "1014e85f-df0e-44bf-9029-3e4710e0e268"
-        const val DEFAULT_DEVICE_TOKEN = "kiosk-demo-token-change-me"
+        // Short numbers — create matching device on Face API (POST /devices with id + token).
+        const val DEFAULT_API_URL = "https://face.folksindia.org"
+        const val DEFAULT_DEVICE_ID = "1001"
+        const val DEFAULT_DEVICE_TOKEN = "48291573"
         const val DEFAULT_THRESHOLD = 0.30f
     }
 }

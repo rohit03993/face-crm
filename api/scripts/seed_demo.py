@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 
 API = "http://127.0.0.1:8000"
 CRM_TOKEN = "change-me-crm-service-token"
-DEVICE_TOKEN = "kiosk-demo-token-change-me"
+DEVICE_TOKEN = "48291573"
+DEVICE_ID = "1001"
 
 
 def main() -> None:
@@ -28,12 +29,21 @@ def main() -> None:
     health.raise_for_status()
     print("health:", health.json())
 
-    # Create device (ignore if token already used — caller can re-run with new token)
-    r = client.post("/devices", json={"name": "Gate 1 Kiosk", "gate": "main", "token": DEVICE_TOKEN})
+    # Create device with short numeric id (ignore if already exists)
+    r = client.post(
+        "/devices",
+        json={
+            "id": DEVICE_ID,
+            "name": "Gate 1 Kiosk",
+            "gate": "main",
+            "token": DEVICE_TOKEN,
+        },
+    )
     if r.status_code == 400:
         print("device may already exist:", r.text)
         devices = client.get("/devices").json()
-        device_id = devices[0]["id"] if devices else None
+        device_id = next((d["id"] for d in devices if d["id"] == DEVICE_ID), None)
+        device_id = device_id or (devices[0]["id"] if devices else None)
     else:
         r.raise_for_status()
         device_id = r.json()["id"]

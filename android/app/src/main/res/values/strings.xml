@@ -65,6 +65,7 @@
     <string name="verifying">Checking face</string>
     <string name="loading_model">Starting camera AI</string>
     <string name="model_ready">Camera ready</string>
+    <string name="model_failed">Face model failed to load</string>
     <string name="model_download_title">Downloading face model</string>
     <string name="model_download_preparing">Preparing download… (~166 MB, one time)</string>
     <string name="model_download_progress">Downloading… %1$d%%</string>

@@ -1,5 +1,6 @@
 package com.school.faceverify.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -40,12 +41,17 @@ class SettingsActivity : AppCompatActivity() {
                     ?.ifBlank { KioskConfig.DEFAULT_DEVICE_TOKEN }
                     ?: KioskConfig.DEFAULT_DEVICE_TOKEN,
                 threshold = threshold,
+                cameraAttendanceMode = false,
             )
             lifecycleScope.launch {
                 FaceVerifyApp.instance.settings.save(cfg)
                 Toast.makeText(this@SettingsActivity, "Saved", Toast.LENGTH_SHORT).show()
                 finish()
             }
+        }
+
+        binding.btnOpenRfid.setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java))
         }
     }
 }

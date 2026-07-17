@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     device_token_pepper: str = "change-me-device-pepper"
 
     crm_callback_url: str = "http://localhost/api/face-verify/approve"
+    crm_camera_punch_url: str | None = None
     crm_callback_secret: str = "change-me-crm-callback-secret"
 
     face_model_name: str = "buffalo_l"
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     embedding_dim: int = 512
     match_threshold: float = 0.40
     verification_timeout_seconds: int = 30
+    camera_punch_cooldown_seconds: int = 60
 
     storage_dir: str = "./storage"
     faces_dir: str = "./storage/faces"

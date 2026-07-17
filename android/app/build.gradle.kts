@@ -48,6 +48,10 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.cardview:cardview:1.0.0")
+    implementation("androidx.coordinatorlayout:coordinatorlayout:1.2.0")
+
     // CameraX
     val cameraX = "1.4.1"
     implementation("androidx.camera:camera-core:$cameraX")

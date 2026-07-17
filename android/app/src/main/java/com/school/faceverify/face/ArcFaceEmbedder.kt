@@ -74,6 +74,7 @@ class ArcFaceEmbedder(context: Context) : AutoCloseable {
 
     companion object {
         const val MODEL_ASSET = "w600k_r50.onnx"
+        const val MODEL_VERSION = "w600k_r50"
         const val EMBEDDING_DIM = 512
 
         private fun ensureModelFile(context: Context): File {

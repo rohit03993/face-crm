@@ -10,7 +10,15 @@ from app.config import get_settings
 from app.db import get_db
 from app.face_engine import average_embeddings, decode_image_bytes, extract_embedding
 from app.models import FaceImage, FaceTemplate, Student
-from app.schemas import EmbeddingOut, EnrollResponse, StudentCreate, StudentOut
+from app.schemas import (
+    EmbeddingOut,
+    EnrollResponse,
+    StudentBulkSyncIn,
+    StudentBulkSyncOut,
+    StudentCreate,
+    StudentListItem,
+    StudentOut,
+)
 
 router = APIRouter(prefix="/students", tags=["students"])
 settings = get_settings()
@@ -18,6 +26,57 @@ settings = get_settings()
 
 @router.post("", response_model=StudentOut, dependencies=[Depends(require_crm_token)])
 def upsert_student(body: StudentCreate, db: Session = Depends(get_db)) -> Student:
+    student = _upsert_student(body, db)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@router.post(
+    "/bulk-sync",
+    response_model=StudentBulkSyncOut,
+    dependencies=[Depends(require_crm_token)],
+)
+def bulk_sync_students(
+    body: StudentBulkSyncIn,
+    db: Session = Depends(get_db),
+) -> StudentBulkSyncOut:
+    for student in body.students:
+        _upsert_student(student, db)
+    db.commit()
+    return StudentBulkSyncOut(synced=len(body.students))
+
+
+@router.get("", response_model=list[StudentListItem])
+def list_students(
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> list[StudentListItem]:
+    students = db.query(Student).order_by(Student.enrollment_number.asc()).all()
+    items: list[StudentListItem] = []
+    for student in students:
+        template = (
+            db.query(FaceTemplate)
+            .filter(
+                FaceTemplate.student_id == student.id,
+                FaceTemplate.model_version == settings.face_model_version,
+            )
+            .first()
+        )
+        items.append(
+            StudentListItem(
+                id=student.id,
+                enrollment_number=student.enrollment_number,
+                name=student.name,
+                batch=student.batch,
+                enrolled=template is not None,
+                image_count=template.image_count if template else 0,
+            )
+        )
+    return items
+
+
+def _upsert_student(body: StudentCreate, db: Session) -> Student:
     enrollment = body.enrollment_number.strip().upper()
     existing = None
     if body.id:
@@ -31,8 +90,6 @@ def upsert_student(body: StudentCreate, db: Session = Depends(get_db)) -> Studen
         existing.enrollment_number = enrollment
         if body.crm_student_id:
             existing.crm_student_id = body.crm_student_id
-        db.commit()
-        db.refresh(existing)
         return existing
 
     student = Student(
@@ -44,8 +101,6 @@ def upsert_student(body: StudentCreate, db: Session = Depends(get_db)) -> Studen
     if body.id:
         student.id = body.id
     db.add(student)
-    db.commit()
-    db.refresh(student)
     return student
 
 
@@ -66,20 +121,32 @@ async def enroll_student(
     student_id: str,
     images: list[UploadFile] = File(...),
     angles: str | None = Form(default=None),
+    name: str | None = Form(default=None),
     db: Session = Depends(get_db),
     _auth=Depends(require_crm_or_device),
 ) -> EnrollResponse:
-    # Accept UUID or enrollment_number (e.g. STU001)
+    # Accept UUID or enrollment_number (e.g. STU001 / FI 0801)
     student = db.get(Student, student_id)
     if student is None:
         enr = student_id.strip().upper()
         student = db.query(Student).filter(Student.enrollment_number == enr).first()
     if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
+        # Kiosk can register a new student while capturing faces.
+        enr = student_id.strip().upper()
+        if not enr:
+            raise HTTPException(status_code=404, detail="Student not found")
+        display_name = (name or enr).strip() or enr
+        student = Student(enrollment_number=enr, name=display_name)
+        db.add(student)
+        db.commit()
+        db.refresh(student)
+    elif name and name.strip() and student.name != name.strip():
+        student.name = name.strip()
+        db.commit()
     student_id = student.id
 
-    if len(images) < 5 or len(images) > 10:
-        raise HTTPException(status_code=400, detail="Provide 5–10 face images")
+    if len(images) < 3 or len(images) > 6:
+        raise HTTPException(status_code=400, detail="Provide 3–6 face images")
 
     angle_list = [a.strip() for a in angles.split(",")] if angles else []
     embeddings: list[np.ndarray] = []

@@ -1,5 +1,12 @@
 # Face Verify Kiosk (Android)
 
+## App flow
+
+1. **Home** — Ready for punch · Students · Settings  
+2. **Students** — list enrolled faces · Add student  
+3. **Add student** — roll + name · capture 3–4 photos · save  
+4. **Ready for punch** — screen stays on · auto face → CRM attendance  
+
 ## Requirements
 - Android Studio Ladybug+ / AGP 8.7
 - Device/emulator with camera (minSdk 26)
@@ -11,18 +18,17 @@
 3. Rebuild the app.
 
 ## Configure
-Open **Settings** in the app:
-- API base URL (emulator → `http://10.0.2.2:8000`, real device → your LAN IP)
-- Device ID (from `POST /devices` / seed script)
+Open **Settings**:
+- API base URL (`https://face.folksindia.org` on production)
+- Device ID (from `POST /devices`)
 - Device token
-- Match threshold (default `0.40`)
 
 ## Modes
-- **Kiosk:** waits for WS verification requests, on-device ArcFace match, posts results
-- **Enroll:** capture 5–10 angles, upload to `POST /students/{id}/enroll`
+- **Ready for punch:** continuous identify → `POST /camera-identify` → CRM punch  
+- **Students / Add:** enroll 3–6 face photos (recommended 3–4)  
+- **RFID verify (Settings advanced):** legacy WebSocket card-gate screen  
 
 ## Kiosk hardening
-- `BOOT_COMPLETED` auto-launch
-- Optional lock-task (`startLockTask`) — whitelist app as device owner/lock-task package for full kiosk
-- WS reconnect with exponential backoff
-- Offline result queue retry
+- `BOOT_COMPLETED` opens Home
+- Attendance screen uses `keepScreenOn`
+- WS reconnect / offline queue remain on RFID screen

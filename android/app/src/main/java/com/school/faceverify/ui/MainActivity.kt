@@ -35,9 +35,14 @@ import com.school.faceverify.net.KioskWebSocket
 import com.school.faceverify.net.OfflineResultQueue
 import com.school.faceverify.net.VerificationRequestMsg
 import com.school.faceverify.util.FeedbackPlayer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,12 +57,16 @@ class MainActivity : AppCompatActivity() {
     private var embedder: ArcFaceEmbedder? = null
     private var pipeline: FacePipeline? = null
     private var ws: KioskWebSocket? = null
+    private var apiClient: FaceApiClient? = null
     private var feedback: FeedbackPlayer? = null
     private var config: KioskConfig = KioskConfig()
     private val pendingFrame = AtomicReference<Bitmap?>(null)
     private val verifyMutex = Mutex()
     private lateinit var offlineQueue: OfflineResultQueue
     private val cameraExecutor = Executors.newSingleThreadExecutor()
+    private var cameraAttendanceJob: Job? = null
+    private var verificationJob: Job? = null
+    private var modeConfigJob: Job? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -115,15 +124,55 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             FaceVerifyApp.instance.settings.configFlow.collectLatest { cfg ->
+                val previous = config
                 config = cfg
-                reconnectWs()
-                flushOffline()
+                modeConfigJob?.cancel()
+                modeConfigJob = lifecycleScope.launch {
+                    configureMode(previous)
+                    flushOffline()
+                }
             }
         }
     }
 
+    private suspend fun configureMode(previous: KioskConfig? = null) {
+        cameraAttendanceJob?.cancelAndJoin()
+        cameraAttendanceJob = null
+        verificationJob?.cancelAndJoin()
+        verificationJob = null
+
+        val connectionChanged = previous == null
+            || previous.apiBaseUrl != config.apiBaseUrl
+            || previous.deviceId != config.deviceId
+            || previous.deviceToken != config.deviceToken
+        val modeChanged = previous == null || previous.cameraAttendanceMode != config.cameraAttendanceMode
+
+        if (connectionChanged) {
+            apiClient = FaceApiClient(config.apiBaseUrl, config.deviceToken)
+        }
+
+        if (config.cameraAttendanceMode) {
+            if (modeChanged || ws != null) {
+                ws?.stop()
+                ws = null
+            }
+            setConnection(false)
+            showIdleStatus()
+            cameraAttendanceJob = lifecycleScope.launch { runCameraAttendanceLoop() }
+            return
+        }
+
+        cameraAttendanceJob?.cancelAndJoin()
+        cameraAttendanceJob = null
+        if (modeChanged || connectionChanged || ws == null) {
+            ws?.stop()
+            ws = null
+            reconnectWs()
+        }
+        showIdleStatus()
+    }
+
     private fun reconnectWs() {
-        ws?.stop()
         if (config.deviceId.isBlank() || config.deviceToken.isBlank()) {
             setConnection(false)
             return
@@ -187,14 +236,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showIdleStatus() {
-        binding.statusBanner.text = getString(R.string.waiting)
-        binding.statusHint.text = getString(R.string.waiting_hint)
+        binding.statusBanner.text = getString(
+            if (config.cameraAttendanceMode) R.string.camera_ready else R.string.waiting,
+        )
+        binding.statusHint.text = getString(
+            if (config.cameraAttendanceMode) R.string.camera_ready_hint else R.string.waiting_hint,
+        )
         setStatusTone(StatusTone.IDLE)
     }
 
     private fun handleWsMessage(text: String) {
+        if (config.cameraAttendanceMode) return
         val msg = JsonLite.parseVerification(text) ?: return
-        lifecycleScope.launch { runVerification(msg) }
+        verificationJob = lifecycleScope.launch { runVerification(msg) }
     }
 
     private suspend fun runVerification(msg: VerificationRequestMsg) {
@@ -246,6 +300,97 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private suspend fun runCameraAttendanceLoop() {
+        while (currentCoroutineContext().isActive && config.cameraAttendanceMode) {
+            val pipe = pipeline
+            if (pipe == null) {
+                delay(500)
+                continue
+            }
+
+            val frame = pendingFrame.getAndSet(null)
+            if (frame == null) {
+                delay(120)
+                continue
+            }
+
+            if (!verifyMutex.tryLock()) {
+                delay(120)
+                continue
+            }
+
+            try {
+                val embedded = withContext(Dispatchers.Default) {
+                    pipe.embedFromBitmap(frame)
+                }
+                if (embedded == null) {
+                    delay(250)
+                    continue
+                }
+
+                withContext(Dispatchers.Main) {
+                    binding.statusBanner.text = getString(R.string.verifying)
+                    binding.statusHint.text = "Identifying enrolled student…"
+                    setStatusTone(StatusTone.VERIFY)
+                }
+
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        requireNotNull(apiClient)
+                            .identifyCameraFace(embedded.first, ArcFaceEmbedder.MODEL_VERSION)
+                    }
+                    withContext(Dispatchers.Main) { setConnection(true) }
+
+                    when {
+                        result.matched && result.attendanceRecorded && !result.alreadyProcessed -> {
+                            val student = result.name ?: result.enrollmentNumber ?: "Student"
+                            withContext(Dispatchers.Main) {
+                                binding.statusBanner.text = getString(R.string.attendance_recorded)
+                                binding.statusHint.text =
+                                    "$student  ·  ${"%.2f".format(result.score ?: 0f)}"
+                                setStatusTone(StatusTone.PASS)
+                                feedback?.playPass(student)
+                            }
+                            delay(2500)
+                        }
+                        result.matched && result.alreadyProcessed -> {
+                            // Same person still in frame; server cooldown already
+                            // protected CRM from another IN/OUT punch.
+                            delay(900)
+                        }
+                        result.matched -> {
+                            withContext(Dispatchers.Main) {
+                                binding.statusBanner.text = getString(R.string.fail)
+                                binding.statusHint.text =
+                                    result.message ?: "Attendance not recorded"
+                                setStatusTone(StatusTone.FAIL)
+                            }
+                            delay(1500)
+                        }
+                        else -> {
+                            delay(500)
+                        }
+                    }
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    Log.e(TAG, "camera attendance identify failed", t)
+                    withContext(Dispatchers.Main) {
+                        setConnection(false)
+                        binding.statusBanner.text = getString(R.string.camera_ready)
+                        binding.statusHint.text = "Face API unavailable · retrying"
+                        setStatusTone(StatusTone.FAIL)
+                    }
+                    delay(2000)
+                }
+
+                withContext(Dispatchers.Main) { showIdleStatus() }
+                delay(250)
+            } finally {
+                verifyMutex.unlock()
+            }
+        }
+    }
+
     private suspend fun finishPass(msg: VerificationRequestMsg, score: Float) {
         withContext(Dispatchers.Main) {
             binding.statusBanner.text = getString(R.string.pass)
@@ -285,7 +430,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         withContext(Dispatchers.IO) {
             try {
-                val client = FaceApiClient(config.apiBaseUrl, config.deviceToken)
+                val client = apiClient ?: FaceApiClient(config.apiBaseUrl, config.deviceToken)
                 val ok = client.submitResult(requestId, score, passed, failFile, note)
                 if (!ok) {
                     offlineQueue.enqueue(requestId, score, passed, failFile?.absolutePath)
@@ -299,7 +444,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun flushOffline() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val client = FaceApiClient(config.apiBaseUrl, config.deviceToken)
+            val client = apiClient ?: FaceApiClient(config.apiBaseUrl, config.deviceToken)
             offlineQueue.drain { requestId, score, passed, failPath ->
                 try {
                     client.submitResult(requestId, score, passed, failPath?.let { File(it) })
@@ -375,6 +520,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        modeConfigJob?.cancel()
+        cameraAttendanceJob?.cancel()
+        verificationJob?.cancel()
         ws?.stop()
         pipeline?.close()
         embedder?.close()

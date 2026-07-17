@@ -30,6 +30,25 @@ class StudentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class StudentListItem(BaseModel):
+    id: str
+    enrollment_number: str
+    name: str
+    batch: str | None
+    enrolled: bool
+    image_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class StudentBulkSyncIn(BaseModel):
+    students: list[StudentCreate] = Field(..., min_length=1, max_length=5000)
+
+
+class StudentBulkSyncOut(BaseModel):
+    synced: int
+
+
 class EmbeddingOut(BaseModel):
     student_id: str
     enrollment_number: str
@@ -86,6 +105,23 @@ class VerificationResultIn(BaseModel):
     score: float
     passed: bool
     note: str | None = None
+
+
+class CameraIdentifyIn(BaseModel):
+    embedding: list[float] = Field(..., min_length=512, max_length=512)
+    model_version: str
+
+
+class CameraIdentifyOut(BaseModel):
+    matched: bool
+    attendance_recorded: bool = False
+    already_processed: bool = False
+    student_id: str | None = None
+    enrollment_number: str | None = None
+    name: str | None = None
+    score: float | None = None
+    threshold: float
+    message: str | None = None
 
 
 class WsVerificationPayload(BaseModel):

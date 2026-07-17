@@ -36,10 +36,7 @@ class EnrollActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEnrollBinding
     private val pendingFrame = AtomicReference<Bitmap?>(null)
     private val captures = mutableListOf<File>()
-    private val angles = listOf(
-        "front", "left", "right", "up", "down",
-        "front2", "left2", "right2", "smile", "neutral",
-    )
+    private val angles = listOf("front", "left", "right", "up", "down", "smile")
     private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     private val permissionLauncher = registerForActivityResult(
@@ -54,11 +51,9 @@ class EnrollActivity : AppCompatActivity() {
         setContentView(binding.root)
         updateUi()
 
-        // Prefill easy roll number (demo seed student)
-        binding.inputStudentId.setText("STU001")
-
         binding.btnCapture.setOnClickListener { captureShot() }
         binding.btnUpload.setOnClickListener { upload() }
+        binding.btnCancel.setOnClickListener { finish() }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -68,8 +63,8 @@ class EnrollActivity : AppCompatActivity() {
     }
 
     private fun captureShot() {
-        if (captures.size >= 10) {
-            Toast.makeText(this, "Max 10 images", Toast.LENGTH_SHORT).show()
+        if (captures.size >= MAX_SHOTS) {
+            Toast.makeText(this, "Max $MAX_SHOTS photos", Toast.LENGTH_SHORT).show()
             return
         }
         val frame = pendingFrame.get()
@@ -82,68 +77,66 @@ class EnrollActivity : AppCompatActivity() {
         file.outputStream().use { frame.compress(Bitmap.CompressFormat.JPEG, 92, it) }
         captures.add(file)
         updateUi()
-        Toast.makeText(this, "Captured $angle", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Captured ${captures.size}/$TARGET_SHOTS", Toast.LENGTH_SHORT).show()
     }
 
     private fun updateUi() {
         val n = captures.size
-        val needed = 5
         binding.captureCount.text = when {
-            n < needed -> "$n of $needed captured"
-            else -> "$n captured · ready to upload"
+            n < MIN_SHOTS -> "$n of $MIN_SHOTS minimum · aim for $TARGET_SHOTS"
+            n < TARGET_SHOTS -> "$n captured · one more optional"
+            else -> "$n captured · ready to save"
         }
-        binding.enrollProgress.max = needed
-        binding.enrollProgress.progress = n.coerceAtMost(needed)
-        binding.btnUpload.isEnabled = n in 5..10
-        val hint = when {
-            n == 0 -> "Look straight into the oval"
-            n == 1 -> "Turn slightly left"
-            n == 2 -> "Turn slightly right"
-            n == 3 -> "Tilt chin up a little"
-            n == 4 -> "Tilt chin down a little"
-            else -> "Looking good — tap Upload"
+        binding.enrollProgress.max = TARGET_SHOTS
+        binding.enrollProgress.progress = n.coerceAtMost(TARGET_SHOTS)
+        binding.btnUpload.isEnabled = n in MIN_SHOTS..MAX_SHOTS
+        binding.hintText.text = when (n) {
+            0 -> "Look straight into the oval"
+            1 -> "Turn slightly left"
+            2 -> "Turn slightly right"
+            3 -> "Optional: tilt chin up a little"
+            else -> "Looking good — tap Save student"
         }
-        binding.hintText.text = hint
     }
 
     private fun upload() {
         val studentId = binding.inputStudentId.text?.toString()?.trim().orEmpty()
+        val studentName = binding.inputStudentName.text?.toString()?.trim().orEmpty()
         if (studentId.isBlank()) {
-            Toast.makeText(this, "Enter student ID", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Enter roll / student ID", Toast.LENGTH_SHORT).show()
             return
         }
         binding.btnUpload.isEnabled = false
         binding.btnCapture.isEnabled = false
-        binding.hintText.text = "Uploading… first time can take 2–5 minutes. Wait."
-        Toast.makeText(this, "Uploading… please wait", Toast.LENGTH_LONG).show()
+        binding.hintText.text = "Saving student… please wait"
+        Toast.makeText(this, "Uploading faces…", Toast.LENGTH_LONG).show()
 
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 val (ok, body) = withContext(Dispatchers.IO) {
-                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
-                        .enroll(studentId, captures.toList(), angles.take(captures.size))
+                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).enroll(
+                        studentId = studentId,
+                        images = captures.toList(),
+                        angles = angles.take(captures.size),
+                        name = studentName.ifBlank { null },
+                    )
                 }
                 if (ok) {
-                    Toast.makeText(this@EnrollActivity, "Enrolled OK", Toast.LENGTH_LONG).show()
-                    captures.clear()
-                    updateUi()
+                    Toast.makeText(this@EnrollActivity, "Student saved", Toast.LENGTH_LONG).show()
+                    setResult(RESULT_OK)
                     finish()
                 } else {
-                    binding.hintText.text = "Enroll failed"
-                    Toast.makeText(this@EnrollActivity, "Enroll failed: $body", Toast.LENGTH_LONG).show()
-                    binding.btnUpload.isEnabled = captures.size in 5..10
+                    binding.hintText.text = "Save failed"
+                    Toast.makeText(this@EnrollActivity, "Save failed: $body", Toast.LENGTH_LONG).show()
+                    binding.btnUpload.isEnabled = captures.size in MIN_SHOTS..MAX_SHOTS
                     binding.btnCapture.isEnabled = true
                 }
             } catch (e: Exception) {
                 Log.e("EnrollActivity", "enroll upload failed", e)
                 binding.hintText.text = "Upload error"
-                Toast.makeText(
-                    this@EnrollActivity,
-                    "Upload error: ${e.message}",
-                    Toast.LENGTH_LONG,
-                ).show()
-                binding.btnUpload.isEnabled = captures.size in 5..10
+                Toast.makeText(this@EnrollActivity, "Upload error: ${e.message}", Toast.LENGTH_LONG).show()
+                binding.btnUpload.isEnabled = captures.size in MIN_SHOTS..MAX_SHOTS
                 binding.btnCapture.isEnabled = true
             }
         }
@@ -206,5 +199,11 @@ class EnrollActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
+    }
+
+    companion object {
+        private const val MIN_SHOTS = 3
+        private const val TARGET_SHOTS = 4
+        private const val MAX_SHOTS = 6
     }
 }

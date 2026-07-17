@@ -2,6 +2,7 @@ package com.school.faceverify.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -17,6 +18,7 @@ data class KioskConfig(
     val deviceId: String = DEFAULT_DEVICE_ID,
     val deviceToken: String = DEFAULT_DEVICE_TOKEN,
     val threshold: Float = DEFAULT_THRESHOLD,
+    val cameraAttendanceMode: Boolean = false,
 ) {
     companion object {
         // Demo seed values from api/scripts/seed_demo.py — change only if you re-seed.
@@ -32,6 +34,7 @@ class AppSettings(private val context: Context) {
     private val keyDeviceId = stringPreferencesKey("device_id")
     private val keyToken = stringPreferencesKey("device_token")
     private val keyThreshold = floatPreferencesKey("threshold")
+    private val keyCameraAttendanceMode = booleanPreferencesKey("camera_attendance_mode")
 
     val configFlow: Flow<KioskConfig> = context.dataStore.data.map { prefs ->
         KioskConfig(
@@ -39,6 +42,7 @@ class AppSettings(private val context: Context) {
             deviceId = prefs[keyDeviceId]?.ifBlank { null } ?: KioskConfig.DEFAULT_DEVICE_ID,
             deviceToken = prefs[keyToken]?.ifBlank { null } ?: KioskConfig.DEFAULT_DEVICE_TOKEN,
             threshold = prefs[keyThreshold] ?: KioskConfig.DEFAULT_THRESHOLD,
+            cameraAttendanceMode = prefs[keyCameraAttendanceMode] ?: false,
         )
     }
 
@@ -50,6 +54,7 @@ class AppSettings(private val context: Context) {
             prefs[keyDeviceId] = config.deviceId.trim().ifBlank { KioskConfig.DEFAULT_DEVICE_ID }
             prefs[keyToken] = config.deviceToken.trim().ifBlank { KioskConfig.DEFAULT_DEVICE_TOKEN }
             prefs[keyThreshold] = config.threshold
+            prefs[keyCameraAttendanceMode] = config.cameraAttendanceMode
         }
     }
 }

@@ -1,17 +1,25 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import uuid
 
 import cv2
+import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth import require_crm_token, require_device
 from app.config import get_settings
-from app.crm_callback import notify_crm_pass
+from app.crm_callback import notify_crm_camera_punch, notify_crm_pass
 from app.db import get_db
 from app.face_engine import decode_image_bytes
 from app.models import Device, FailCapture, FaceTemplate, Student, VerificationRequest, VerificationStatus
-from app.schemas import VerificationRequestCreate, VerificationRequestOut, WsVerificationPayload
+from app.schemas import (
+    CameraIdentifyIn,
+    CameraIdentifyOut,
+    VerificationRequestCreate,
+    VerificationRequestOut,
+    WsVerificationPayload,
+)
 from app.ws_hub import hub
 
 router = APIRouter(tags=["verification"])
@@ -82,6 +90,160 @@ async def create_verification_request(
         db.refresh(req)
 
     return req
+
+
+@router.post("/camera-identify", response_model=CameraIdentifyOut)
+async def camera_identify(
+    body: CameraIdentifyIn,
+    db: Session = Depends(get_db),
+    device: Device = Depends(require_device),
+) -> CameraIdentifyOut:
+    """Identify one live face against enrolled templates and mark CRM attendance."""
+    if body.model_version != settings.face_model_version:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Model mismatch: kiosk={body.model_version}, "
+                f"server={settings.face_model_version}"
+            ),
+        )
+
+    embedding = np.asarray(body.embedding, dtype=np.float32)
+    if embedding.shape != (settings.embedding_dim,) or not np.all(np.isfinite(embedding)):
+        raise HTTPException(status_code=422, detail="Invalid embedding")
+    norm = float(np.linalg.norm(embedding))
+    if norm < 1e-6:
+        raise HTTPException(status_code=422, detail="Zero embedding")
+    embedding /= norm
+
+    enrolled = (
+        db.query(FaceTemplate, Student)
+        .join(Student, Student.id == FaceTemplate.student_id)
+        .filter(FaceTemplate.model_version == settings.face_model_version)
+        .all()
+    )
+    if not enrolled:
+        return CameraIdentifyOut(
+            matched=False,
+            threshold=settings.match_threshold,
+            message="No students have enrolled face templates.",
+        )
+
+    best_student: Student | None = None
+    best_score = -1.0
+    for template, student in enrolled:
+        candidate = np.asarray(template.embedding, dtype=np.float32)
+        if candidate.shape != (settings.embedding_dim,) or not np.all(np.isfinite(candidate)):
+            continue
+        candidate_norm = float(np.linalg.norm(candidate))
+        if candidate_norm < 1e-6:
+            continue
+        score = float(np.dot(embedding, candidate / candidate_norm))
+        if score > best_score:
+            best_score = score
+            best_student = student
+
+    if best_student is None or best_score < settings.match_threshold:
+        return CameraIdentifyOut(
+            matched=False,
+            score=max(best_score, 0.0),
+            threshold=settings.match_threshold,
+            message="No enrolled face matched.",
+        )
+
+    cooldown = max(0, settings.camera_punch_cooldown_seconds)
+    if cooldown:
+        recent_rows = (
+            db.query(VerificationRequest)
+            .filter(
+                VerificationRequest.student_id == best_student.id,
+                VerificationRequest.device_id == device.id,
+                VerificationRequest.status == VerificationStatus.PASS,
+                VerificationRequest.resolved_at
+                >= datetime.now(timezone.utc) - timedelta(seconds=cooldown),
+            )
+            .order_by(VerificationRequest.resolved_at.desc())
+            .limit(20)
+            .all()
+        )
+        recent = next(
+            (
+                row
+                for row in recent_rows
+                if (row.meta or {}).get("source") == "camera_kiosk"
+            ),
+            None,
+        )
+        if recent:
+            # Sliding presence window: as long as this face remains visible, keep
+            # extending the cooldown. This prevents a stationary student from
+            # receiving an automatic OUT punch after a fixed interval.
+            recent.resolved_at = datetime.now(timezone.utc)
+            recent_meta = dict(recent.meta or {})
+            recent_meta["last_seen_at"] = recent.resolved_at.isoformat()
+            recent.meta = recent_meta
+            db.commit()
+            return CameraIdentifyOut(
+                matched=True,
+                attendance_recorded=True,
+                already_processed=True,
+                student_id=best_student.id,
+                enrollment_number=best_student.enrollment_number,
+                name=best_student.name,
+                score=best_score,
+                threshold=settings.match_threshold,
+                message="Already recorded within the cooldown window.",
+            )
+
+    request_id = str(uuid.uuid4())
+    req = VerificationRequest(
+        id=request_id,
+        student_id=best_student.id,
+        device_id=device.id,
+        status=VerificationStatus.PENDING,
+        score=best_score,
+        meta={"source": "camera_kiosk"},
+        resolved_at=None,
+    )
+    db.add(req)
+    db.commit()
+
+    crm_result = await notify_crm_camera_punch(
+        request_id=request_id,
+        student_id=best_student.id,
+        enrollment_number=best_student.enrollment_number,
+        device_id=device.id,
+        score=best_score,
+    )
+    if crm_result is None:
+        req.status = VerificationStatus.FAIL
+        req.resolved_at = datetime.now(timezone.utc)
+        req.meta = {
+            "source": "camera_kiosk",
+            "error": "crm_camera_punch_failed",
+        }
+        db.commit()
+        raise HTTPException(status_code=502, detail="CRM camera-punch callback failed")
+
+    req.status = VerificationStatus.PASS
+    req.resolved_at = datetime.now(timezone.utc)
+    req.meta = {
+        "source": "camera_kiosk",
+        "crm_result": crm_result,
+    }
+    db.commit()
+
+    return CameraIdentifyOut(
+        matched=True,
+        attendance_recorded=True,
+        already_processed=bool(crm_result.get("already_processed", False)),
+        student_id=best_student.id,
+        enrollment_number=best_student.enrollment_number,
+        name=best_student.name,
+        score=best_score,
+        threshold=settings.match_threshold,
+        message="Attendance recorded.",
+    )
 
 
 @router.post("/verification-results", response_model=VerificationRequestOut)

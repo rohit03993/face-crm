@@ -74,6 +74,23 @@ class EnrollTemplateIn(BaseModel):
     enrollment_number: str | None = None
 
 
+class FaceCheckIn(BaseModel):
+    embedding: list[float] = Field(..., min_length=512, max_length=512)
+    model_version: str
+    # When updating an existing student, exclude them from the duplicate search.
+    exclude_student_id: str | None = None
+
+
+class FaceCheckOut(BaseModel):
+    duplicate: bool
+    score: float | None = None
+    threshold: float
+    student_id: str | None = None
+    enrollment_number: str | None = None
+    name: str | None = None
+    message: str | None = None
+
+
 class EnrollResponse(BaseModel):
     student_id: str
     model_version: str

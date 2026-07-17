@@ -15,6 +15,8 @@ from app.schemas import (
     EmbeddingOut,
     EnrollResponse,
     EnrollTemplateIn,
+    FaceCheckIn,
+    FaceCheckOut,
     StudentBulkSyncIn,
     StudentBulkSyncOut,
     StudentCreate,
@@ -169,6 +171,71 @@ def _delete_student_cascade(db: Session, student: Student) -> None:
     db.delete(student)
 
 
+def _normalize_embedding(raw: list[float] | np.ndarray) -> np.ndarray:
+    emb = np.asarray(raw, dtype=np.float32)
+    if emb.shape != (settings.embedding_dim,) or not np.all(np.isfinite(emb)):
+        raise HTTPException(status_code=422, detail="Invalid embedding")
+    norm = float(np.linalg.norm(emb))
+    if norm < 1e-6:
+        raise HTTPException(status_code=422, detail="Zero embedding")
+    return (emb / norm).astype(np.float32)
+
+
+def _find_duplicate_face(
+    db: Session,
+    embedding: np.ndarray,
+    *,
+    exclude_student_id: str | None = None,
+) -> tuple[Student, float] | None:
+    """Return best matching enrolled student if similarity looks like the same person."""
+    threshold = float(settings.duplicate_face_threshold)
+    enrolled = (
+        db.query(FaceTemplate, Student)
+        .join(Student, Student.id == FaceTemplate.student_id)
+        .filter(FaceTemplate.model_version == settings.face_model_version)
+        .all()
+    )
+    best_student: Student | None = None
+    best_score = -1.0
+    for template, student in enrolled:
+        if exclude_student_id and student.id == exclude_student_id:
+            continue
+        candidate = np.asarray(template.embedding, dtype=np.float32)
+        if candidate.shape != (settings.embedding_dim,) or not np.all(np.isfinite(candidate)):
+            continue
+        cnorm = float(np.linalg.norm(candidate))
+        if cnorm < 1e-6:
+            continue
+        score = float(np.dot(embedding, candidate / cnorm))
+        if score > best_score:
+            best_score = score
+            best_student = student
+    if best_student is None or best_score < threshold:
+        return None
+    return best_student, best_score
+
+
+def _reject_if_duplicate(
+    db: Session,
+    embedding: np.ndarray,
+    *,
+    exclude_student_id: str | None = None,
+) -> None:
+    hit = _find_duplicate_face(db, embedding, exclude_student_id=exclude_student_id)
+    if hit is None:
+        return
+    student, score = hit
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"This face already belongs to {student.name} "
+            f"({student.enrollment_number}). "
+            f"Capture the correct person, or update that student instead. "
+            f"Score {score:.2f}"
+        ),
+    )
+
+
 def _save_phone_template(
     db: Session,
     *,
@@ -184,13 +251,7 @@ def _save_phone_template(
             ),
         )
 
-    emb = np.asarray(body.embedding, dtype=np.float32)
-    if emb.shape != (settings.embedding_dim,) or not np.all(np.isfinite(emb)):
-        raise HTTPException(status_code=422, detail="Invalid embedding")
-    norm = float(np.linalg.norm(emb))
-    if norm < 1e-6:
-        raise HTTPException(status_code=422, detail="Zero embedding")
-    emb = (emb / norm).astype(np.float32)
+    emb = _normalize_embedding(body.embedding)
 
     student = db.get(Student, student_key)
     if student is None:
@@ -208,6 +269,9 @@ def _save_phone_template(
         student.name = body.name.strip()
 
     sid = student.id
+    # Block saving Rohit's face under Neha (etc.). Re-enrolling the same student is OK.
+    _reject_if_duplicate(db, emb, exclude_student_id=sid)
+
     _clear_face_data(db, sid)
     db.flush()
 
@@ -229,6 +293,45 @@ def _save_phone_template(
 
 
 # --- Device-friendly POST routes (some networks block PATCH/DELETE) ---
+
+
+@router.post("/check-face", response_model=FaceCheckOut)
+def check_face_duplicate(
+    body: FaceCheckIn,
+    db: Session = Depends(get_db),
+    _auth=Depends(require_crm_or_device),
+) -> FaceCheckOut:
+    """Kiosk can call this after a capture to warn early about duplicate faces."""
+    if body.model_version != settings.face_model_version:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Model mismatch: kiosk={body.model_version}, "
+                f"server={settings.face_model_version}"
+            ),
+        )
+    emb = _normalize_embedding(body.embedding)
+    threshold = float(settings.duplicate_face_threshold)
+    hit = _find_duplicate_face(db, emb, exclude_student_id=body.exclude_student_id)
+    if hit is None:
+        return FaceCheckOut(
+            duplicate=False,
+            threshold=threshold,
+            message="Face is unique enough to enroll.",
+        )
+    student, score = hit
+    return FaceCheckOut(
+        duplicate=True,
+        score=score,
+        threshold=threshold,
+        student_id=student.id,
+        enrollment_number=student.enrollment_number,
+        name=student.name,
+        message=(
+            f"This face already belongs to {student.name} "
+            f"({student.enrollment_number})."
+        ),
+    )
 
 
 @router.post("/enroll-template", response_model=EnrollResponse)
@@ -347,14 +450,9 @@ async def enroll_student(
     if len(images) < 3 or len(images) > 6:
         raise HTTPException(status_code=400, detail="Provide 3–6 face images")
 
-    # Re-enroll replaces previous face photos/templates for this student.
-    _clear_face_data(db, student_id)
-    db.flush()
-
     angle_list = [a.strip() for a in angles.split(",")] if angles else []
     embeddings: list[np.ndarray] = []
-    face_dir = Path(settings.faces_dir) / student_id
-    face_dir.mkdir(parents=True, exist_ok=True)
+    decoded: list[tuple[np.ndarray, str]] = []
 
     for idx, upload in enumerate(images):
         raw = await upload.read()
@@ -363,15 +461,27 @@ async def enroll_student(
             emb = extract_embedding(img)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=f"Image {idx + 1}: {exc}") from exc
-
         embeddings.append(emb)
         angle = angle_list[idx] if idx < len(angle_list) else f"shot_{idx + 1}"
+        decoded.append((img, angle))
+
+    template_vec = average_embeddings(embeddings)
+    _reject_if_duplicate(db, template_vec, exclude_student_id=student_id)
+
+    # Re-enroll replaces previous face photos/templates for this student.
+    _clear_face_data(db, student_id)
+    db.flush()
+
+    face_dir = Path(settings.faces_dir) / student_id
+    face_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, (img, angle) in enumerate(decoded):
         filename = f"{angle}_{idx + 1}.jpg"
         path = face_dir / filename
         cv2.imwrite(str(path), img)
         db.add(FaceImage(student_id=student_id, path=str(path), angle=angle))
 
-    template_vec = average_embeddings(embeddings).tolist()
+    template_list = template_vec.tolist()
     template = (
         db.query(FaceTemplate)
         .filter(
@@ -381,12 +491,12 @@ async def enroll_student(
         .first()
     )
     if template:
-        template.embedding = template_vec
+        template.embedding = template_list
         template.image_count = len(embeddings)
     else:
         template = FaceTemplate(
             student_id=student_id,
-            embedding=template_vec,
+            embedding=template_list,
             model_version=settings.face_model_version,
             image_count=len(embeddings),
         )

@@ -211,6 +211,42 @@ class FaceApiClient(
         }
     }
 
+    /**
+     * Returns null if face is unique, or a human-readable message if it matches
+     * another enrolled student.
+     */
+    fun checkDuplicateFace(
+        embedding: FloatArray,
+        modelVersion: String,
+        excludeStudentId: String? = null,
+    ): String? {
+        val payload = JSONObject()
+            .put("model_version", modelVersion)
+            .put(
+                "embedding",
+                JSONArray().apply { embedding.forEach { put(it.toDouble()) } },
+            )
+        if (!excludeStudentId.isNullOrBlank()) {
+            payload.put("exclude_student_id", excludeStudentId.trim())
+        }
+        val request = Request.Builder()
+            .url("$base/students/check-face")
+            .header("Authorization", "Bearer $deviceToken")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                // Don't block capture on check failures — save will still enforce.
+                return null
+            }
+            val json = JSONObject(raw)
+            if (!json.optBoolean("duplicate", false)) return null
+            return json.optString("message").takeIf { it.isNotBlank() }
+                ?: "This face is already enrolled for another student"
+        }
+    }
+
     fun updateStudent(
         studentId: String,
         name: String?,

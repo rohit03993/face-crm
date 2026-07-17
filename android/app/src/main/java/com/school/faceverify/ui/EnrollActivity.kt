@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -152,7 +153,29 @@ class EnrollActivity : AppCompatActivity() {
                     Toast.makeText(this@EnrollActivity, R.string.enroll_no_face, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-                embeddings.add(result.first)
+                val emb = result.first
+                val duplicateMsg = withContext(Dispatchers.IO) {
+                    try {
+                        val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                        FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).checkDuplicateFace(
+                            embedding = emb,
+                            modelVersion = ArcFaceEmbedder.MODEL_VERSION,
+                            excludeStudentId = existingStudentId,
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (duplicateMsg != null) {
+                    AlertDialog.Builder(this@EnrollActivity)
+                        .setTitle(R.string.duplicate_face_title)
+                        .setMessage(duplicateMsg)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                    binding.hintText.text = getString(R.string.duplicate_face_hint)
+                    return@launch
+                }
+                embeddings.add(emb)
                 updateUi()
                 Toast.makeText(
                     this@EnrollActivity,
@@ -272,7 +295,15 @@ class EnrollActivity : AppCompatActivity() {
                     finish()
                 } else {
                     binding.hintText.text = "Save failed"
-                    Toast.makeText(this@EnrollActivity, body, Toast.LENGTH_LONG).show()
+                    if (body.contains("already belongs", ignoreCase = true)) {
+                        AlertDialog.Builder(this@EnrollActivity)
+                            .setTitle(R.string.duplicate_face_title)
+                            .setMessage(body)
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show()
+                    } else {
+                        Toast.makeText(this@EnrollActivity, body, Toast.LENGTH_LONG).show()
+                    }
                     restoreAfterSaveFailure()
                 }
             } catch (e: Exception) {

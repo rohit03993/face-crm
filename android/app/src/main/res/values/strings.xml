@@ -44,6 +44,8 @@
     <string name="enroll_saving_process">Saving template on server…</string>
     <string name="enroll_no_face">No clear face — try again</string>
     <string name="enroll_model_loading">Loading face model…</string>
+    <string name="duplicate_face_title">Face already enrolled</string>
+    <string name="duplicate_face_hint">Wrong person in frame — capture the correct student</string>
     <string name="enroll_offline_block">Offline — connect to Face API before saving</string>
     <string name="enroll_capture_hint_0">Look straight into the oval</string>
     <string name="enroll_capture_hint_1">Turn slightly left</string>

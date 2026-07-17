@@ -11,18 +11,26 @@ android {
         applicationId = "com.school.faceverify"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Real kiosk phones are arm64 — drop x86/armeabi native libs (~70MB+).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
 
@@ -35,6 +43,19 @@ android {
     }
     buildFeatures {
         viewBinding = true
+    }
+
+    // Do not pack the 166MB ONNX into the APK (download on first launch instead).
+    androidResources {
+        ignoreAssetsPattern =
+            "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:*.onnx"
+    }
+
+    packaging {
+        jniLibs {
+            // Keep only filtered ABIs
+            excludes += setOf("**/x86/**", "**/x86_64/**", "**/armeabi-v7a/**")
+        }
     }
 }
 

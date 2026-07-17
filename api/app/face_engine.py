@@ -95,3 +95,4 @@ def ensure_storage_dirs() -> None:
     Path(settings.faces_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.fails_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.storage_dir).mkdir(parents=True, exist_ok=True)
+    (Path(settings.storage_dir) / "models").mkdir(parents=True, exist_ok=True)

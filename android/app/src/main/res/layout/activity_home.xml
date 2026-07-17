@@ -62,6 +62,46 @@
             android:text="@string/home_subtitle"
             android:textSize="17sp" />
 
+        <LinearLayout
+            android:id="@+id/modelDownloadPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_bottom_sheet"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/modelDownloadTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/model_download_title"
+                android:textColor="@color/mist"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/modelDownloadStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/model_download_preparing"
+                android:textColor="@color/mist_dim"
+                android:textSize="13sp" />
+
+            <ProgressBar
+                android:id="@+id/modelDownloadProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:layout_marginTop="12dp"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/bg_progress" />
+        </LinearLayout>
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardAttendance"
             android:layout_width="match_parent"

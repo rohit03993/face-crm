@@ -2,11 +2,14 @@ package com.school.faceverify.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.R
 import com.school.faceverify.databinding.ActivityHomeBinding
+import com.school.faceverify.face.ModelStore
 import com.school.faceverify.net.FaceApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,6 +20,7 @@ import kotlinx.coroutines.withContext
 class HomeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHomeBinding
     private var statusJob: Job? = null
+    private var modelReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,14 +28,18 @@ class HomeActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.cardAttendance.setOnClickListener {
+            if (!ensureModelReadyOrToast()) return@setOnClickListener
             startActivity(Intent(this, AttendanceActivity::class.java))
         }
         binding.cardStudents.setOnClickListener {
+            if (!ensureModelReadyOrToast()) return@setOnClickListener
             startActivity(Intent(this, StudentsActivity::class.java))
         }
         binding.btnSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+
+        prepareFaceModel()
     }
 
     override fun onResume() {
@@ -47,6 +55,56 @@ class HomeActivity : AppCompatActivity() {
         statusJob?.cancel()
         statusJob = null
         super.onPause()
+    }
+
+    private fun ensureModelReadyOrToast(): Boolean {
+        if (modelReady || ModelStore.isReady(this)) {
+            modelReady = true
+            return true
+        }
+        Toast.makeText(this, R.string.model_download_wait, Toast.LENGTH_LONG).show()
+        prepareFaceModel()
+        return false
+    }
+
+    private fun prepareFaceModel() {
+        if (ModelStore.isReady(this)) {
+            modelReady = true
+            binding.modelDownloadPanel.visibility = View.GONE
+            return
+        }
+        binding.modelDownloadPanel.visibility = View.VISIBLE
+        binding.modelDownloadStatus.text = getString(R.string.model_download_preparing)
+        binding.modelDownloadProgress.progress = 0
+        binding.cardAttendance.isEnabled = false
+        binding.cardStudents.isEnabled = false
+
+        lifecycleScope.launch {
+            try {
+                val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                withContext(Dispatchers.IO) {
+                    ModelStore.ensureReady(this@HomeActivity, cfg.apiBaseUrl) { pct ->
+                        runOnUiThread {
+                            binding.modelDownloadProgress.progress = pct
+                            binding.modelDownloadStatus.text =
+                                getString(R.string.model_download_progress, pct)
+                        }
+                    }
+                }
+                modelReady = true
+                binding.modelDownloadStatus.text = getString(R.string.model_download_done)
+                binding.modelDownloadPanel.visibility = View.GONE
+                binding.cardAttendance.isEnabled = true
+                binding.cardStudents.isEnabled = true
+            } catch (e: Exception) {
+                modelReady = false
+                binding.modelDownloadStatus.text =
+                    getString(R.string.model_download_failed, e.message ?: "error")
+                binding.cardAttendance.isEnabled = false
+                binding.cardStudents.isEnabled = false
+                Toast.makeText(this@HomeActivity, e.message, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun refreshSummary() {

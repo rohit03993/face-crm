@@ -2,8 +2,11 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.config import get_settings
@@ -46,6 +49,11 @@ app.include_router(students.router)
 app.include_router(devices.router)
 app.include_router(verification.router)
 app.include_router(ws.router)
+
+# Phone downloads ArcFace ONNX from here (keeps APK small).
+_models_dir = Path(settings.storage_dir) / "models"
+_models_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/models", StaticFiles(directory=str(_models_dir)), name="models")
 
 
 @app.get("/health", response_model=HealthResponse)

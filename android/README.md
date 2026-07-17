@@ -9,13 +9,23 @@
 
 ## Requirements
 - Android Studio Ladybug+ / AGP 8.7
-- Device/emulator with camera (minSdk 26)
-- ONNX model asset: `app/src/main/assets/w600k_r50.onnx`
+- Device with camera (minSdk 26) — **arm64-v8a** (APK is arm64-only for size)
+- Face API serving the ONNX model at `/models/w600k_r50.onnx`
 
-## Model install
-1. Download InsightFace `buffalo_l` pack.
-2. Copy `w600k_r50.onnx` into `android/app/src/main/assets/`.
-3. Rebuild the app.
+## Light APK (model not inside the APK)
+The ArcFace file is **~166 MB** and is downloaded once on first Home open from:
+
+`{API base URL}/models/w600k_r50.onnx`
+
+On the server, place the file at `api/storage/models/w600k_r50.onnx`, then restart the API.
+
+Build release APK:
+
+```bash
+cd android
+./gradlew assembleRelease
+# app/build/outputs/apk/release/app-release-unsigned.apk  (typically ~25–40 MB)
+```
 
 ## Configure
 Open **Settings** (defaults already set):

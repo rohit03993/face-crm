@@ -3,7 +3,7 @@
     <string name="app_name">Face Verify</string>
     <string name="brand">Face Verify</string>
     <string name="brand_tagline">Attendance gate</string>
-    <string name="home_subtitle">Add students, then start attendance. Card machines stay unchanged.</string>
+    <string name="home_subtitle">Add students, then start attendance. Face model downloads once (~166 MB).</string>
     <string name="ready_for_punch">Ready for punch</string>
     <string name="ready_for_punch_hint">Screen stays on. Anyone enrolled is marked in CRM automatically.</string>
     <string name="students_menu">Students</string>
@@ -65,7 +65,12 @@
     <string name="verifying">Checking face</string>
     <string name="loading_model">Starting camera AI</string>
     <string name="model_ready">Camera ready</string>
-    <string name="model_failed">Face model failed to load</string>
+    <string name="model_download_title">Downloading face model</string>
+    <string name="model_download_preparing">Preparing download… (~166 MB, one time)</string>
+    <string name="model_download_progress">Downloading… %1$d%%</string>
+    <string name="model_download_done">Face model ready</string>
+    <string name="model_download_failed">Download failed: %1$s</string>
+    <string name="model_download_wait">Please wait — face model is still downloading</string>
     <string name="pass">Verified</string>
     <string name="fail">Not matched</string>
     <string name="settings">Settings</string>

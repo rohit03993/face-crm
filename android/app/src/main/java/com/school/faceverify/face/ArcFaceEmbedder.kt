@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.sqrt
 
@@ -20,7 +19,10 @@ class ArcFaceEmbedder(context: Context) : AutoCloseable {
     private val inputName: String
 
     init {
-        val modelFile = ensureModelFile(context)
+        val modelFile = ModelStore.modelFile(context)
+        require(ModelStore.isReady(context)) {
+            "Face model missing — wait for download to finish on Home"
+        }
         val opts = OrtSession.SessionOptions()
         opts.setIntraOpNumThreads(2)
         // Load from file path (avoids holding a 170MB byte[] on the heap)
@@ -76,17 +78,6 @@ class ArcFaceEmbedder(context: Context) : AutoCloseable {
         const val MODEL_ASSET = "w600k_r50.onnx"
         const val MODEL_VERSION = "w600k_r50"
         const val EMBEDDING_DIM = 512
-
-        private fun ensureModelFile(context: Context): File {
-            val out = File(context.filesDir, MODEL_ASSET)
-            if (out.exists() && out.length() > 1_000_000L) {
-                return out
-            }
-            context.assets.open(MODEL_ASSET).use { input ->
-                out.outputStream().use { output -> input.copyTo(output) }
-            }
-            return out
-        }
 
         fun l2Normalize(v: FloatArray): FloatArray {
             var sum = 0.0

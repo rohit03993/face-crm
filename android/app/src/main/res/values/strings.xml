@@ -52,6 +52,14 @@
     <string name="enroll_capture_hint_2">Turn slightly right</string>
     <string name="enroll_capture_hint_3">Optional: tilt chin up a little</string>
     <string name="enroll_capture_hint_ready">Looking good — tap Save student</string>
+    <string name="enroll_pose_front">Look straight · hold still — auto capturing</string>
+    <string name="enroll_pose_left">Slowly turn your head left — auto capturing</string>
+    <string name="enroll_pose_right">Slowly turn your head right — auto capturing</string>
+    <string name="enroll_pose_up">Tilt your chin up a little — auto capturing</string>
+    <string name="enroll_pose_hold">Hold still…</string>
+    <string name="enroll_pose_ready">All poses captured · tap Save student</string>
+    <string name="enroll_pose_progress">Pose %1$d of %2$d · %3$s</string>
+    <string name="capture_manual">Capture now</string>
     <string name="waiting">Ready for card tap</string>
     <string name="waiting_hint">Stand in the frame · look at the camera</string>
     <string name="verifying">Checking face</string>
@@ -80,7 +88,7 @@
     <string name="ws_connected">Connected</string>
     <string name="ws_disconnected">Offline</string>
     <string name="enroll_title">Student enrollment</string>
-    <string name="enroll_subtitle">Capture 3–4 clear angles of the face</string>
+    <string name="enroll_subtitle">Auto-capture: front, left, right, then chin up</string>
     <string name="settings_title">Kiosk settings</string>
     <string name="settings_subtitle">API URL · Device ID 1001 · Token 48291573</string>
     <string name="back">Back</string>

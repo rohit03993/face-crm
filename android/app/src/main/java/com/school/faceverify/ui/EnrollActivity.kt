@@ -26,11 +26,15 @@ import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.R
 import com.school.faceverify.databinding.ActivityEnrollBinding
 import com.school.faceverify.face.ArcFaceEmbedder
+import com.school.faceverify.face.EnrollPose
 import com.school.faceverify.face.FacePipeline
 import com.school.faceverify.net.FaceApiClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -39,8 +43,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Enroll on the phone: detect + ArcFace embed locally, then upload only the
- * small 512-d template to the API (no bulky JPEGs on the server).
+ * Enroll on the phone with guided auto-capture (front → left → right → up),
+ * then upload only the small 512-d template to the API.
  */
 class EnrollActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEnrollBinding
@@ -48,13 +52,16 @@ class EnrollActivity : AppCompatActivity() {
     private val embeddings = mutableListOf<FloatArray>()
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val capturingPaused = AtomicBoolean(false)
+    private val captureBusy = AtomicBoolean(false)
     private var statusJob: Job? = null
+    private var autoJob: Job? = null
     private var apiOnline: Boolean? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var embedder: ArcFaceEmbedder? = null
     private var pipeline: FacePipeline? = null
     private var editMode = false
     private var existingStudentId: String? = null
+    private var poseHoldStartedAt = 0L
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -79,11 +86,12 @@ class EnrollActivity : AppCompatActivity() {
             binding.inputStudentId.isEnabled = false
         }
 
+        binding.btnCapture.text = getString(R.string.capture_manual)
         updateUi()
         binding.btnCapture.isEnabled = false
         binding.hintText.text = getString(R.string.enroll_model_loading)
 
-        binding.btnCapture.setOnClickListener { captureShot() }
+        binding.btnCapture.setOnClickListener { captureShot(manual = true) }
         binding.btnUpload.setOnClickListener { upload() }
         binding.btnCancel.setOnClickListener { finish() }
 
@@ -96,6 +104,7 @@ class EnrollActivity : AppCompatActivity() {
                 embedder = loaded.first
                 pipeline = loaded.second
                 updateUi()
+                startAutoCaptureLoop()
                 if (ContextCompat.checkSelfPermission(
                         this@EnrollActivity,
                         Manifest.permission.CAMERA,
@@ -121,15 +130,80 @@ class EnrollActivity : AppCompatActivity() {
             ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
             if (binding.savingOverlay.visibility != View.VISIBLE) updateUi()
         }
+        if (pipeline != null) startAutoCaptureLoop()
     }
 
     override fun onPause() {
         statusJob?.cancel()
         statusJob = null
+        autoJob?.cancel()
+        autoJob = null
         super.onPause()
     }
 
-    private fun captureShot() {
+    private fun currentPose(): EnrollPose? =
+        EnrollPose.SEQUENCE.getOrNull(embeddings.size)
+
+    private fun startAutoCaptureLoop() {
+        if (autoJob?.isActive == true) return
+        autoJob = lifecycleScope.launch {
+            while (isActive) {
+                if (capturingPaused.get() ||
+                    captureBusy.get() ||
+                    pipeline == null ||
+                    embeddings.size >= TARGET_SHOTS ||
+                    binding.savingOverlay.visibility == View.VISIBLE
+                ) {
+                    delay(200)
+                    continue
+                }
+                val pose = currentPose() ?: break
+                val frame = pendingFrame.get()
+                if (frame == null) {
+                    delay(80)
+                    continue
+                }
+                val reading = withContext(Dispatchers.Default) {
+                    pipeline?.detectPose(frame)
+                }
+                if (reading == null || !reading.hasLandmarks) {
+                    poseHoldStartedAt = 0L
+                    withContext(Dispatchers.Main) {
+                        binding.hintText.text = getString(pose.hintRes)
+                    }
+                    delay(120)
+                    continue
+                }
+                if (pose.matches(reading.yaw, reading.pitch)) {
+                    val now = System.currentTimeMillis()
+                    if (poseHoldStartedAt == 0L) poseHoldStartedAt = now
+                    val held = now - poseHoldStartedAt
+                    withContext(Dispatchers.Main) {
+                        binding.hintText.text = if (held >= HOLD_MS / 2) {
+                            getString(R.string.enroll_pose_hold)
+                        } else {
+                            getString(pose.hintRes)
+                        }
+                    }
+                    if (held >= HOLD_MS) {
+                        poseHoldStartedAt = 0L
+                        captureShot(manual = false)
+                        delay(COOLDOWN_MS)
+                    } else {
+                        delay(60)
+                    }
+                } else {
+                    poseHoldStartedAt = 0L
+                    withContext(Dispatchers.Main) {
+                        binding.hintText.text = getString(pose.hintRes)
+                    }
+                    delay(80)
+                }
+            }
+        }
+    }
+
+    private fun captureShot(manual: Boolean) {
         if (pipeline == null) {
             Toast.makeText(this, R.string.enroll_model_loading, Toast.LENGTH_SHORT).show()
             return
@@ -143,17 +217,28 @@ class EnrollActivity : AppCompatActivity() {
             Toast.makeText(this, "No frame yet", Toast.LENGTH_SHORT).show()
             return
         }
+        if (!captureBusy.compareAndSet(false, true)) return
+
         binding.btnCapture.isEnabled = false
         lifecycleScope.launch {
             try {
+                val pose = currentPose()
+                if (!manual && pose != null) {
+                    val reading = withContext(Dispatchers.Default) {
+                        pipeline?.detectPose(frame)
+                    }
+                    if (reading == null || !pose.matches(reading.yaw, reading.pitch)) {
+                        return@launch
+                    }
+                }
                 val result = withContext(Dispatchers.Default) {
-                    pipeline?.embedFromBitmap(frame)
+                    pipeline?.embedWithPose(frame)
                 }
                 if (result == null) {
                     Toast.makeText(this@EnrollActivity, R.string.enroll_no_face, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-                val emb = result.first
+                val emb = result.embedding
                 val duplicateMsg = withContext(Dispatchers.IO) {
                     try {
                         val cfg = FaceVerifyApp.instance.settings.configFlow.first()
@@ -177,16 +262,20 @@ class EnrollActivity : AppCompatActivity() {
                 }
                 embeddings.add(emb)
                 updateUi()
+                val poseName = pose?.id ?: "shot"
                 Toast.makeText(
                     this@EnrollActivity,
-                    "Captured ${embeddings.size}/$TARGET_SHOTS",
+                    "Captured $poseName (${embeddings.size}/$TARGET_SHOTS)",
                     Toast.LENGTH_SHORT,
                 ).show()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("EnrollActivity", "capture failed", e)
                 Toast.makeText(this@EnrollActivity, "Capture failed", Toast.LENGTH_SHORT).show()
             } finally {
-                binding.btnCapture.isEnabled = pipeline != null
+                captureBusy.set(false)
+                binding.btnCapture.isEnabled =
+                    pipeline != null && binding.savingOverlay.visibility != View.VISIBLE
             }
         }
     }
@@ -194,11 +283,18 @@ class EnrollActivity : AppCompatActivity() {
     private fun updateUi() {
         val n = embeddings.size
         val modelReady = pipeline != null
+        val total = EnrollPose.SEQUENCE.size
+        val pose = currentPose()
         binding.captureCount.text = when {
             !modelReady -> getString(R.string.enroll_model_loading)
-            n < MIN_SHOTS -> "$n of $MIN_SHOTS minimum · aim for $TARGET_SHOTS"
-            n < TARGET_SHOTS -> "$n captured · one more optional"
-            else -> "$n captured · ready to save"
+            n >= TARGET_SHOTS -> getString(R.string.enroll_pose_ready)
+            pose != null -> getString(
+                R.string.enroll_pose_progress,
+                n + 1,
+                total,
+                pose.id,
+            )
+            else -> "$n captured"
         }
         binding.enrollProgress.max = TARGET_SHOTS
         binding.enrollProgress.progress = n.coerceAtMost(TARGET_SHOTS)
@@ -207,12 +303,12 @@ class EnrollActivity : AppCompatActivity() {
             modelReady && n in MIN_SHOTS..MAX_SHOTS && apiOnline != false
         if (modelReady && binding.savingOverlay.visibility != View.VISIBLE) {
             binding.hintText.text = when {
-                editMode && n == 0 -> "Capture 3–4 new angles, then tap Update face"
-                editMode && n >= MIN_SHOTS -> "Looking good — tap Update face"
-                n == 0 -> getString(R.string.enroll_capture_hint_0)
-                n == 1 -> getString(R.string.enroll_capture_hint_1)
-                n == 2 -> getString(R.string.enroll_capture_hint_2)
-                n == 3 -> getString(R.string.enroll_capture_hint_3)
+                n >= TARGET_SHOTS && editMode -> getString(R.string.enroll_capture_hint_ready).replace(
+                    "Save student",
+                    "Update face",
+                )
+                n >= TARGET_SHOTS -> getString(R.string.enroll_pose_ready)
+                pose != null -> getString(pose.hintRes)
                 else -> getString(R.string.enroll_capture_hint_ready)
             }
         }
@@ -222,6 +318,12 @@ class EnrollActivity : AppCompatActivity() {
         binding.savingOverlay.visibility = if (visible) View.VISIBLE else View.GONE
         if (step != null) binding.savingStep.text = step
         capturingPaused.set(visible)
+        if (visible) {
+            autoJob?.cancel()
+            autoJob = null
+        } else {
+            startAutoCaptureLoop()
+        }
     }
 
     private fun upload() {
@@ -384,6 +486,7 @@ class EnrollActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        autoJob?.cancel()
         cameraExecutor.shutdown()
         pipeline?.close()
         embedder?.close()
@@ -398,5 +501,7 @@ class EnrollActivity : AppCompatActivity() {
         private const val MIN_SHOTS = 3
         private const val TARGET_SHOTS = 4
         private const val MAX_SHOTS = 6
+        private const val HOLD_MS = 700L
+        private const val COOLDOWN_MS = 900L
     }
 }

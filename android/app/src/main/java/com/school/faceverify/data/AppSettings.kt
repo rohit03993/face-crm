@@ -13,20 +13,19 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore by preferencesDataStore("face_verify_settings")
 
 data class KioskConfig(
-    // Only API URL usually needs changing for a real phone (use PC LAN IP).
-    val apiBaseUrl: String = DEFAULT_API_URL,
-    val deviceId: String = DEFAULT_DEVICE_ID,
-    val deviceToken: String = DEFAULT_DEVICE_TOKEN,
+    // Empty by default — user must enter Face Platform URL in Settings.
+    val apiBaseUrl: String = "",
+    val deviceId: String = "",
+    val deviceToken: String = "",
     val threshold: Float = DEFAULT_THRESHOLD,
     val cameraAttendanceMode: Boolean = false,
 ) {
     companion object {
-        // Live Face host until face.taskbook.co.in DNS is ready. Override per school in Settings.
-        const val DEFAULT_API_URL = "https://face.folksindia.org"
-        const val DEFAULT_DEVICE_ID = ""
-        const val DEFAULT_DEVICE_TOKEN = ""
         const val DEFAULT_THRESHOLD = 0.30f
     }
+
+    val hasFaceUrl: Boolean
+        get() = apiBaseUrl.trim().isNotEmpty()
 }
 
 class AppSettings(private val context: Context) {
@@ -38,9 +37,9 @@ class AppSettings(private val context: Context) {
 
     val configFlow: Flow<KioskConfig> = context.dataStore.data.map { prefs ->
         KioskConfig(
-            apiBaseUrl = prefs[keyApi]?.ifBlank { null } ?: KioskConfig.DEFAULT_API_URL,
-            deviceId = prefs[keyDeviceId]?.ifBlank { null } ?: KioskConfig.DEFAULT_DEVICE_ID,
-            deviceToken = prefs[keyToken]?.ifBlank { null } ?: KioskConfig.DEFAULT_DEVICE_TOKEN,
+            apiBaseUrl = prefs[keyApi]?.trim().orEmpty(),
+            deviceId = prefs[keyDeviceId]?.trim().orEmpty(),
+            deviceToken = prefs[keyToken]?.trim().orEmpty(),
             threshold = prefs[keyThreshold] ?: KioskConfig.DEFAULT_THRESHOLD,
             cameraAttendanceMode = prefs[keyCameraAttendanceMode] ?: false,
         )
@@ -50,7 +49,7 @@ class AppSettings(private val context: Context) {
 
     suspend fun save(config: KioskConfig) {
         context.dataStore.edit { prefs ->
-            prefs[keyApi] = config.apiBaseUrl.trim().trimEnd('/').ifBlank { KioskConfig.DEFAULT_API_URL }
+            prefs[keyApi] = config.apiBaseUrl.trim().trimEnd('/')
             prefs[keyDeviceId] = config.deviceId.trim()
             prefs[keyToken] = config.deviceToken.trim()
             prefs[keyThreshold] = config.threshold

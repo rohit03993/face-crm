@@ -73,6 +73,7 @@ class EnrollActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityEnrollBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SystemBars.apply(this, binding.root)
 
         editMode = intent.getBooleanExtra(EXTRA_EDIT_MODE, false)
         existingStudentId = intent.getStringExtra(EXTRA_STUDENT_ID)

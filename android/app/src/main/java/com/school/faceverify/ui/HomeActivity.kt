@@ -27,6 +27,7 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SystemBars.apply(this, binding.root)
 
         binding.cardAttendance.setOnClickListener {
             if (!ensureModelReadyOrToast()) return@setOnClickListener
@@ -91,6 +92,14 @@ class HomeActivity : AppCompatActivity() {
         modelJob = lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                if (!cfg.hasFaceUrl) {
+                    modelReady = false
+                    binding.modelDownloadPanel.visibility = View.VISIBLE
+                    binding.modelDownloadStatus.text = getString(R.string.face_url_required)
+                    binding.cardAttendance.isEnabled = false
+                    binding.cardStudents.isEnabled = false
+                    return@launch
+                }
                 withContext(Dispatchers.IO) {
                     ModelStore.ensureReady(this@HomeActivity, cfg.apiBaseUrl) { pct ->
                         runOnUiThread {

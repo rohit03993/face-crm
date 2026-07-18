@@ -20,6 +20,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SystemBars.apply(this, binding.root)
 
         lifecycleScope.launch {
             val cfg = FaceVerifyApp.instance.settings.configFlow.first()
@@ -30,12 +31,20 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.btnSave.setOnClickListener {
+            val url = binding.inputApiUrl.text?.toString()?.trim().orEmpty().trimEnd('/')
+            if (url.isBlank()) {
+                Toast.makeText(this, "Enter Face Platform URL", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                Toast.makeText(this, "URL must start with https://", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
             val threshold = binding.inputThreshold.text?.toString()?.toFloatOrNull()
                 ?: KioskConfig.DEFAULT_THRESHOLD
             val cfg = KioskConfig(
-                apiBaseUrl = binding.inputApiUrl.text?.toString()
-                    ?.ifBlank { KioskConfig.DEFAULT_API_URL }
-                    ?: KioskConfig.DEFAULT_API_URL,
+                apiBaseUrl = url,
                 deviceId = binding.inputDeviceId.text?.toString()?.trim().orEmpty(),
                 deviceToken = binding.inputDeviceToken.text?.toString()?.trim().orEmpty(),
                 threshold = threshold,
@@ -47,6 +56,8 @@ class SettingsActivity : AppCompatActivity() {
                 finish()
             }
         }
+
+        binding.btnBack.setOnClickListener { finish() }
 
         binding.btnOpenRfid.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))

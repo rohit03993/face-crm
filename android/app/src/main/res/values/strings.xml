@@ -78,6 +78,7 @@
     <string name="enroll">Enroll</string>
     <string name="save">Save settings</string>
     <string name="api_base_url">Face Platform URL</string>
+    <string name="api_base_url_hint">https://face.your-host.com</string>
     <string name="device_id">Device number</string>
     <string name="device_id_hint">From Face admin when the school was added, e.g. 1001</string>
     <string name="device_token">Device token</string>
@@ -96,7 +97,8 @@
     <string name="enroll_title">Student enrollment</string>
     <string name="enroll_subtitle">Auto-capture: front, left, right, then chin up</string>
     <string name="settings_title">Kiosk settings</string>
-    <string name="settings_subtitle">Face URL (e.g. https://face.folksindia.org) · Device number · Device token — same APK for every school</string>
+    <string name="settings_subtitle">Enter Face Platform URL, device number, and token from Face admin. Nothing is pre-filled.</string>
+    <string name="face_url_required">Set Face Platform URL in Settings first</string>
     <string name="back">Back</string>
     <string name="open_rfid_mode">Open RFID verify screen</string>
 </resources>

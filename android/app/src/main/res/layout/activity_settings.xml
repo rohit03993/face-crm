@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/ink"
+    android:clipToPadding="false"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingHorizontal="24dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="28dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -18,12 +22,23 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnBack"
+                style="@style/Widget.FaceVerify.Button.Ghost"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:text="@string/back" />
+
             <TextView
                 style="@style/Text.FaceVerify.Brand"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
                 android:layout_weight="1"
-                android:text="@string/settings_title" />
+                android:text="@string/settings_title"
+                android:textAllCaps="false"
+                android:textSize="20sp" />
 
             <LinearLayout
                 android:id="@+id/connectionPill"
@@ -56,8 +71,8 @@
             style="@style/Text.FaceVerify.Hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="24dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="20dp"
             android:text="@string/settings_subtitle" />
 
         <com.google.android.material.textfield.TextInputLayout
@@ -65,6 +80,8 @@
             android:layout_height="wrap_content"
             android:hint="@string/api_base_url"
             app:boxStrokeColor="@color/teal"
+            app:helperTextEnabled="true"
+            app:helperText="@string/api_base_url_hint"
             app:hintTextColor="@color/mist_dim">
 
             <com.google.android.material.textfield.TextInputEditText

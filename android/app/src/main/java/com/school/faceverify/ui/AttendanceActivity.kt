@@ -67,6 +67,7 @@ class AttendanceActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         binding = ActivityAttendanceBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SystemBars.apply(this, binding.root, extraTopDp = 8, extraBottomDp = 8)
         feedback = FeedbackPlayer(this)
 
         binding.btnStop.setOnClickListener { finish() }

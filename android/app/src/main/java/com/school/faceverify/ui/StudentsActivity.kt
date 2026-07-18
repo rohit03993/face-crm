@@ -37,6 +37,7 @@ class StudentsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityStudentsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SystemBars.apply(this, binding.root)
 
         binding.studentsList.layoutManager = LinearLayoutManager(this)
         binding.studentsList.adapter = adapter

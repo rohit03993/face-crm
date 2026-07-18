@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        SystemBars.apply(this, binding.root, extraTopDp = 8, extraBottomDp = 8)
         offlineQueue = OfflineResultQueue(this)
         feedback = FeedbackPlayer(this)
 

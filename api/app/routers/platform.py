@@ -1,9 +1,10 @@
-"""Vendor platform: add school clients and connect CRMs."""
+"""Vendor platform: add school clients and manage devices."""
 
 from __future__ import annotations
 
 import secrets
 import string
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,13 +15,17 @@ from app.auth import hash_token, require_platform_admin
 from app.db import get_db
 from app.models import Device, Tenant, generate_client_code, generate_secret
 from app.schemas import (
+    DeviceTokenOut,
+    DeviceUpdateIn,
     TenantAddDeviceIn,
     TenantConnectIn,
     TenantConnectOut,
     TenantCreateIn,
     TenantCreateOut,
+    TenantDetailOut,
     TenantDeviceOut,
     TenantListItem,
+    TenantUpdateIn,
 )
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -33,13 +38,11 @@ def _normalize_crm_base(url: str) -> str:
     parsed = urlparse(raw)
     if not parsed.netloc:
         raise HTTPException(status_code=422, detail="Invalid CRM website URL")
-    # Store origin only (scheme + host[:port])
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _next_device_id(db: Session) -> str:
-    """Allocate a short numeric device number like 1001, 1002, …"""
-    existing = [d.id for d in db.query(Device.id).all() if d.id and d.id.isdigit()]
+    existing = [d.id for d in db.query(Device.id).all() if d.id and str(d.id).isdigit()]
     if not existing:
         return "1001"
     return str(max(int(x) for x in existing) + 1)
@@ -54,8 +57,19 @@ def _unique_client_code(db: Session) -> str:
 
 
 def _kiosk_device_token() -> str:
-    """Digits-only so kiosk keyboards (and older APKs) can type the token easily."""
     return "".join(secrets.choice(string.digits) for _ in range(8))
+
+
+def _device_out(device: Device, token: str | None = None) -> TenantDeviceOut:
+    return TenantDeviceOut(
+        id=device.id,
+        name=device.name,
+        token=token,
+        gate=device.gate,
+        is_active=device.is_active,
+        tenant_id=device.tenant_id,
+        created_at=device.created_at,
+    )
 
 
 def _create_device_for_tenant(
@@ -68,7 +82,6 @@ def _create_device_for_tenant(
     gate: str | None = None,
 ) -> tuple[Device, str]:
     plain = (token or "").strip() or _kiosk_device_token()
-
     token_hash = hash_token(plain)
     if db.query(Device).filter(Device.token_hash == token_hash).first():
         raise HTTPException(status_code=400, detail="Device token already registered")
@@ -95,6 +108,20 @@ def _create_device_for_tenant(
 )
 def create_tenant(body: TenantCreateIn, db: Session = Depends(get_db)) -> TenantCreateOut:
     crm_base = _normalize_crm_base(body.crm_base_url)
+    existing = (
+        db.query(Tenant)
+        .filter(Tenant.crm_base_url == crm_base)
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A client already exists for {crm_base} "
+                f"(code {existing.client_code}). Open it below instead of adding again."
+            ),
+        )
+
     tenant = Tenant(
         name=body.name.strip(),
         client_code=_unique_client_code(db),
@@ -116,7 +143,7 @@ def create_tenant(body: TenantCreateIn, db: Session = Depends(get_db)) -> Tenant
             device_id=body.device_id,
             token=body.device_token,
         )
-        devices_out.append(TenantDeviceOut(id=device.id, name=device.name, token=plain))
+        devices_out.append(_device_out(device, plain))
 
     db.commit()
     db.refresh(tenant)
@@ -157,9 +184,80 @@ def list_tenants(db: Session = Depends(get_db)) -> list[TenantListItem]:
     return out
 
 
+@router.get(
+    "/tenants/{tenant_id}",
+    response_model=TenantDetailOut,
+    dependencies=[Depends(require_platform_admin)],
+)
+def get_tenant(tenant_id: str, db: Session = Depends(get_db)) -> TenantDetailOut:
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    devices = (
+        db.query(Device)
+        .filter(Device.tenant_id == tenant.id)
+        .order_by(Device.created_at.desc())
+        .all()
+    )
+    return TenantDetailOut(
+        id=tenant.id,
+        name=tenant.name,
+        client_code=tenant.client_code,
+        crm_base_url=tenant.crm_base_url,
+        timezone=tenant.timezone,
+        is_active=tenant.is_active,
+        created_at=tenant.created_at,
+        devices=[_device_out(d) for d in devices],
+    )
+
+
+@router.patch(
+    "/tenants/{tenant_id}",
+    response_model=TenantDetailOut,
+    dependencies=[Depends(require_platform_admin)],
+)
+def update_tenant(
+    tenant_id: str,
+    body: TenantUpdateIn,
+    db: Session = Depends(get_db),
+) -> TenantDetailOut:
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    if body.name is not None:
+        tenant.name = body.name.strip()
+    if body.crm_base_url is not None:
+        tenant.crm_base_url = _normalize_crm_base(body.crm_base_url)
+    if body.timezone is not None and body.timezone.strip():
+        tenant.timezone = body.timezone.strip()
+    if body.is_active is not None:
+        tenant.is_active = 1 if body.is_active else 0
+
+    db.commit()
+    return get_tenant(tenant_id, db)
+
+
+@router.get(
+    "/tenants/{tenant_id}/devices",
+    response_model=list[TenantDeviceOut],
+    dependencies=[Depends(require_platform_admin)],
+)
+def list_tenant_devices(tenant_id: str, db: Session = Depends(get_db)) -> list[TenantDeviceOut]:
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    devices = (
+        db.query(Device)
+        .filter(Device.tenant_id == tenant.id)
+        .order_by(Device.created_at.desc())
+        .all()
+    )
+    return [_device_out(d) for d in devices]
+
+
 @router.post("/connect", response_model=TenantConnectOut)
 def connect_crm(body: TenantConnectIn, db: Session = Depends(get_db)) -> TenantConnectOut:
-    """School CRM: paste client code + confirm CRM URL → get tokens for .env/settings."""
     code = body.client_code.strip().upper()
     tenant = (
         db.query(Tenant)
@@ -175,9 +273,6 @@ def connect_crm(body: TenantConnectIn, db: Session = Depends(get_db)) -> TenantC
     db.refresh(tenant)
 
     devices = db.query(Device).filter(Device.tenant_id == tenant.id, Device.is_active == 1).all()
-    # Tokens are hashed — CRM only gets device numbers for display; plain token shown at create time.
-    device_out = [TenantDeviceOut(id=d.id, name=d.name, token=None) for d in devices]
-
     return TenantConnectOut(
         tenant_id=tenant.id,
         name=tenant.name,
@@ -186,7 +281,7 @@ def connect_crm(body: TenantConnectIn, db: Session = Depends(get_db)) -> TenantC
         service_token=tenant.service_token,
         callback_secret=tenant.callback_secret,
         timezone=tenant.timezone,
-        devices=device_out,
+        devices=[_device_out(d) for d in devices],
     )
 
 
@@ -201,7 +296,7 @@ def add_device(
     db: Session = Depends(get_db),
 ) -> TenantDeviceOut:
     tenant = db.get(Tenant, tenant_id)
-    if not tenant or not tenant.is_active:
+    if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     device, plain = _create_device_for_tenant(
@@ -213,91 +308,63 @@ def add_device(
         gate=body.gate,
     )
     db.commit()
-    return TenantDeviceOut(id=device.id, name=device.name, token=plain)
+    return _device_out(device, plain)
+
+
+@router.patch(
+    "/devices/{device_id}",
+    response_model=TenantDeviceOut,
+    dependencies=[Depends(require_platform_admin)],
+)
+def update_device(
+    device_id: str,
+    body: DeviceUpdateIn,
+    db: Session = Depends(get_db),
+) -> TenantDeviceOut:
+    device = db.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    if body.name is not None:
+        device.name = body.name.strip()
+    if body.gate is not None:
+        device.gate = body.gate.strip() or None
+    if body.is_active is not None:
+        device.is_active = 1 if body.is_active else 0
+
+    db.commit()
+    db.refresh(device)
+    return _device_out(device)
+
+
+@router.post(
+    "/devices/{device_id}/regenerate-token",
+    response_model=DeviceTokenOut,
+    dependencies=[Depends(require_platform_admin)],
+)
+def regenerate_device_token(device_id: str, db: Session = Depends(get_db)) -> DeviceTokenOut:
+    device = db.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    plain = _kiosk_device_token()
+    for _ in range(10):
+        if not db.query(Device).filter(Device.token_hash == hash_token(plain)).first():
+            break
+        plain = _kiosk_device_token()
+    else:
+        raise HTTPException(status_code=500, detail="Could not allocate device token")
+
+    device.token_hash = hash_token(plain)
+    device.is_active = 1
+    db.commit()
+
+    return DeviceTokenOut(id=device.id, name=device.name, token=plain)
 
 
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
-def admin_page() -> str:
-    """Simple vendor UI to add a school client (use with platform admin token)."""
-    return """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Face Platform — Add client</title>
-  <style>
-    :root { font-family: system-ui, sans-serif; color: #0f172a; }
-    body { max-width: 720px; margin: 2rem auto; padding: 0 1rem; background: #f8fafc; }
-    h1 { font-size: 1.4rem; }
-    label { display: block; font-size: .85rem; font-weight: 600; margin-top: 1rem; }
-    input { width: 100%; padding: .6rem .7rem; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; }
-    button { margin-top: 1.25rem; background: #0f172a; color: #fff; border: 0; padding: .7rem 1.1rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
-    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-top: 1rem; }
-    pre { background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow: auto; font-size: .8rem; }
-    .muted { color: #64748b; font-size: .85rem; }
-    .err { color: #b91c1c; }
-  </style>
-</head>
-<body>
-  <h1>Face Platform — Add school client</h1>
-  <p class="muted">Creates a client code + device number. Paste the code into the school CRM. Enter device number + token in the APK Settings (Face URL = this site).</p>
-  <div class="card">
-    <label>Platform admin token</label>
-    <input id="token" type="password" placeholder="PLATFORM_ADMIN_TOKEN"/>
-    <label>School name</label>
-    <input id="name" placeholder="Pal Digital"/>
-    <label>CRM website</label>
-    <input id="crm" placeholder="https://paldigital.in"/>
-    <label>First device number (optional)</label>
-    <input id="device_id" placeholder="3001"/>
-    <button id="go">Add client</button>
-    <p id="msg" class="muted"></p>
-    <pre id="out" hidden></pre>
-  </div>
-  <script>
-    document.getElementById('go').onclick = async () => {
-      const msg = document.getElementById('msg');
-      const out = document.getElementById('out');
-      msg.textContent = 'Working…';
-      msg.className = 'muted';
-      out.hidden = true;
-      try {
-        const res = await fetch('/platform/tenants', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + document.getElementById('token').value.trim(),
-          },
-          body: JSON.stringify({
-            name: document.getElementById('name').value.trim(),
-            crm_base_url: document.getElementById('crm').value.trim(),
-            create_device: true,
-            device_id: document.getElementById('device_id').value.trim() || null,
-            device_name: 'Gate 1',
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-        const d = (data.devices && data.devices[0]) || {};
-        out.textContent =
-          'Give to school CRM:\\n' +
-          '  Face URL:     ' + location.origin + '\\n' +
-          '  Client code:  ' + data.client_code + '\\n\\n' +
-          'Give to APK Settings:\\n' +
-          '  Face URL:     ' + location.origin + '\\n' +
-          '  Device no:    ' + (d.id || '') + '\\n' +
-          '  Device token: ' + (d.token || '') + '\\n\\n' +
-          'Also store in CRM (auto on Connect):\\n' +
-          '  service_token / callback_secret returned by Connect API\\n\\n' +
-          JSON.stringify(data, null, 2);
-        out.hidden = false;
-        msg.textContent = 'Client created. Copy the codes below.';
-      } catch (e) {
-        msg.className = 'err';
-        msg.textContent = String(e.message || e);
-      }
-    };
-  </script>
-</body>
-</html>
-"""
+def admin_page() -> HTMLResponse:
+    path = Path(__file__).resolve().parent.parent / "static" / "platform_admin.html"
+    if not path.is_file():
+        raise HTTPException(status_code=500, detail="Admin UI file missing")
+    return HTMLResponse(path.read_text(encoding="utf-8"))

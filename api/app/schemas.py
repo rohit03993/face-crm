@@ -130,6 +130,12 @@ class TenantDeviceOut(BaseModel):
     id: str
     name: str
     token: str | None = None
+    gate: str | None = None
+    is_active: int | None = None
+    tenant_id: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class TenantCreateOut(BaseModel):
@@ -155,6 +161,24 @@ class TenantListItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TenantDetailOut(BaseModel):
+    id: str
+    name: str
+    client_code: str
+    crm_base_url: str
+    timezone: str
+    is_active: int
+    created_at: datetime | None = None
+    devices: list[TenantDeviceOut] = []
+
+
+class TenantUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    crm_base_url: str | None = Field(default=None, min_length=8, max_length=512)
+    timezone: str | None = None
+    is_active: bool | None = None
+
+
 class TenantConnectIn(BaseModel):
     client_code: str = Field(..., min_length=4, max_length=32)
     crm_base_url: str = Field(..., min_length=8, max_length=512)
@@ -177,6 +201,19 @@ class TenantAddDeviceIn(BaseModel):
     device_id: str | None = Field(default=None, min_length=1, max_length=36, pattern=r"^[0-9A-Za-z_-]+$")
     token: str | None = Field(default=None, min_length=6, max_length=64)
     gate: str | None = None
+
+
+class DeviceUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    gate: str | None = None
+    is_active: bool | None = None
+
+
+class DeviceTokenOut(BaseModel):
+    id: str
+    name: str
+    token: str
+    message: str = "Copy this token now — it will not be shown again."
 
 
 class VerificationRequestCreate(BaseModel):

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Face Platform Admin</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --panel-2: #182338;
+      --line: #273449;
+      --text: #e8eef8;
+      --muted: #93a0b5;
+      --accent: #3b82f6;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --radius: 14px;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(59,130,246,.18), transparent 50%),
+        radial-gradient(900px 400px at 100% 0%, rgba(34,197,94,.12), transparent 45%),
+        var(--bg);
+      color: var(--text);
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 18px 60px; }
+    header { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end; margin-bottom: 22px; }
+    h1 { margin: 0; font-size: 1.55rem; letter-spacing: -.02em; }
+    .sub { margin: 6px 0 0; color: var(--muted); font-size: .92rem; max-width: 58ch; line-height: 1.45; }
+    .auth {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex; gap: 10px; align-items: center; min-width: min(420px, 100%);
+    }
+    .auth input {
+      flex: 1; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+      border-radius: 10px; padding: .65rem .75rem;
+    }
+    .grid { display: grid; gap: 16px; grid-template-columns: 1.1fr .9fr; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 1.05rem; }
+    .card .hint { color: var(--muted); font-size: .84rem; margin: 0 0 14px; }
+    label { display: block; font-size: .78rem; font-weight: 650; color: var(--muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+    input, select {
+      width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+      border-radius: 10px; padding: .7rem .8rem;
+    }
+    .row { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    button, .btn {
+      border: 0; border-radius: 10px; padding: .7rem 1rem; font-weight: 650; cursor: pointer;
+      background: var(--accent); color: white;
+    }
+    button.secondary, .btn.secondary { background: #334155; }
+    button.danger, .btn.danger { background: var(--danger); }
+    button.ghost, .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .school {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px;
+      background: var(--panel-2);
+    }
+    .school.active { outline: 2px solid rgba(59,130,246,.55); }
+    .school-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .school-top h3 { margin: 0; font-size: 1rem; }
+    .meta { color: var(--muted); font-size: .82rem; margin-top: 4px; line-height: 1.45; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+      padding: .2rem .6rem; font-size: .72rem; font-weight: 700;
+      background: rgba(34,197,94,.15); color: #86efac;
+    }
+    .badge.off { background: rgba(148,163,184,.15); color: #cbd5e1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .88rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .toast {
+      position: fixed; right: 16px; bottom: 16px; max-width: 420px; z-index: 40;
+      background: #0f172a; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35); display: none;
+    }
+    .toast.show { display: block; }
+    .toast.err { border-color: rgba(239,68,68,.5); }
+    .toast.ok { border-color: rgba(34,197,94,.45); }
+    .flash {
+      margin-top: 12px; padding: 12px; border-radius: 10px;
+      background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.35);
+      font-size: .88rem; white-space: pre-wrap;
+    }
+    .empty { color: var(--muted); padding: 18px 4px; font-size: .9rem; }
+    .tiny { font-size: .75rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Face Platform Admin</h1>
+        <p class="sub">Manage school clients and kiosk devices. Paste the client code into each CRM. Put Face URL + device number + token in the APK.</p>
+      </div>
+      <div class="auth">
+        <input id="adminToken" type="password" placeholder="Platform admin token" autocomplete="off"/>
+        <button class="secondary" id="btnUnlock" type="button">Unlock</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <div>
+            <h2>Schools</h2>
+            <p class="hint">Existing clients. Open one to view or edit devices — do not re-add the same CRM.</p>
+          </div>
+          <button class="ghost" id="btnRefresh" type="button">Refresh</button>
+        </div>
+        <div id="schoolList" class="empty">Unlock with your platform admin token to load schools.</div>
+      </section>
+
+      <section class="card">
+        <h2 id="sideTitle">Add school client</h2>
+        <p class="hint" id="sideHint">Creates a new client code and first device.</p>
+
+        <div id="addForm">
+          <label>School name</label>
+          <input id="schoolName" placeholder="Folks India"/>
+          <label>CRM website</label>
+          <input id="crmUrl" placeholder="https://folksindia.org"/>
+          <div class="row">
+            <div>
+              <label>First device no. (optional)</label>
+              <input id="deviceNo" placeholder="Auto e.g. 1001"/>
+            </div>
+            <div>
+              <label>Device name</label>
+              <input id="deviceName" placeholder="Gate 1" value="Gate 1"/>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="btnAddSchool" type="button">Add client</button>
+          </div>
+          <div id="createFlash" hidden class="flash"></div>
+        </div>
+
+        <div id="detailPanel" hidden>
+          <label>School name</label>
+          <input id="editName"/>
+          <label>CRM website</label>
+          <input id="editCrm"/>
+          <label>Client code</label>
+          <input id="editCode" class="mono" readonly/>
+          <div class="actions">
+            <button id="btnSaveSchool" type="button">Save school</button>
+            <button id="btnToggleSchool" class="secondary" type="button">Disable</button>
+            <button id="btnCopySetup" class="ghost" type="button">Copy setup notes</button>
+          </div>
+
+          <h2 style="margin-top:22px;">Devices</h2>
+          <p class="hint">Tokens are shown only when created or regenerated. Copy immediately.</p>
+          <div class="row">
+            <div>
+              <label>New device no. (optional)</label>
+              <input id="newDeviceNo" placeholder="Auto"/>
+            </div>
+            <div>
+              <label>New device name</label>
+              <input id="newDeviceName" value="Gate"/>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="btnAddDevice" type="button">Add device</button>
+          </div>
+          <div id="deviceFlash" hidden class="flash"></div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Device no</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="deviceRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const state = { token: localStorage.getItem('face_platform_admin_token') || '', selectedId: null, tenants: [], detail: null };
+
+    const $ = (id) => document.getElementById(id);
+    const toast = (msg, ok = true) => {
+      const el = $('toast');
+      el.className = 'toast show ' + (ok ? 'ok' : 'err');
+      el.textContent = msg;
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => el.classList.remove('show'), 4500);
+    };
+
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + state.token.trim(),
+      };
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { ...opts, headers: { ...authHeaders(), ...(opts.headers || {}) } });
+      let data = null;
+      try { data = await res.json(); } catch (_) {}
+      if (!res.ok) {
+        const detail = data && data.detail;
+        throw new Error(typeof detail === 'string' ? detail : (detail ? JSON.stringify(detail) : res.statusText));
+      }
+      return data;
+    }
+
+    function fmtDetail(err) {
+      return String(err && err.message ? err.message : err);
+    }
+
+    async function unlock() {
+      state.token = $('adminToken').value.trim();
+      if (!state.token) return toast('Enter platform admin token', false);
+      localStorage.setItem('face_platform_admin_token', state.token);
+      try {
+        await loadSchools();
+        toast('Unlocked');
+      } catch (e) {
+        toast(fmtDetail(e), false);
+      }
+    }
+
+    async function loadSchools() {
+      if (!state.token) return;
+      state.tenants = await api('/platform/tenants');
+      renderSchools();
+      if (state.selectedId) {
+        const still = state.tenants.find(t => t.id === state.selectedId);
+        if (still) await openSchool(state.selectedId);
+        else showAddForm();
+      }
+    }
+
+    function renderSchools() {
+      const box = $('schoolList');
+      if (!state.tenants.length) {
+        box.innerHTML = '<div class="empty">No schools yet. Add the first client on the right.</div>';
+        return;
+      }
+      box.innerHTML = state.tenants.map(t => `
+        <div class="school ${state.selectedId === t.id ? 'active' : ''}" data-id="${t.id}">
+          <div class="school-top">
+            <div>
+              <h3>${escapeHtml(t.name)}</h3>
+              <div class="meta">
+                <span class="mono">${escapeHtml(t.client_code)}</span><br/>
+                ${escapeHtml(t.crm_base_url)}<br/>
+                ${t.device_count} device(s)
+              </div>
+            </div>
+            <span class="badge ${t.is_active ? '' : 'off'}">${t.is_active ? 'Active' : 'Disabled'}</span>
+          </div>
+        </div>
+      `).join('');
+      box.querySelectorAll('.school').forEach(el => {
+        el.onclick = () => openSchool(el.dataset.id);
+      });
+    }
+
+    function showAddForm() {
+      state.selectedId = null;
+      state.detail = null;
+      $('addForm').hidden = false;
+      $('detailPanel').hidden = true;
+      $('sideTitle').textContent = 'Add school client';
+      $('sideHint').textContent = 'Creates a new client code and first device.';
+      renderSchools();
+    }
+
+    async function openSchool(id) {
+      state.selectedId = id;
+      state.detail = await api('/platform/tenants/' + id);
+      $('addForm').hidden = true;
+      $('detailPanel').hidden = false;
+      $('sideTitle').textContent = state.detail.name;
+      $('sideHint').textContent = 'Edit school details or manage kiosk devices.';
+      $('editName').value = state.detail.name;
+      $('editCrm').value = state.detail.crm_base_url;
+      $('editCode').value = state.detail.client_code;
+      $('btnToggleSchool').textContent = state.detail.is_active ? 'Disable school' : 'Enable school';
+      renderDevices();
+      renderSchools();
+    }
+
+    function renderDevices() {
+      const rows = $('deviceRows');
+      const devices = (state.detail && state.detail.devices) || [];
+      if (!devices.length) {
+        rows.innerHTML = '<tr><td colspan="4" class="empty">No devices yet.</td></tr>';
+        return;
+      }
+      rows.innerHTML = devices.map(d => `
+        <tr>
+          <td class="mono">${escapeHtml(d.id)}</td>
+          <td>
+            <input data-edit-name="${escapeHtml(d.id)}" value="${escapeHtml(d.name)}" style="min-width:120px"/>
+          </td>
+          <td><span class="badge ${d.is_active ? '' : 'off'}">${d.is_active ? 'Active' : 'Off'}</span></td>
+          <td>
+            <div class="actions" style="margin:0">
+              <button class="ghost" type="button" data-save="${escapeHtml(d.id)}">Save</button>
+              <button class="secondary" type="button" data-toggle="${escapeHtml(d.id)}" data-active="${d.is_active ? 1 : 0}">${d.is_active ? 'Disable' : 'Enable'}</button>
+              <button type="button" data-regen="${escapeHtml(d.id)}">New token</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+      rows.querySelectorAll('[data-save]').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute('data-save');
+          const name = rows.querySelector(`[data-edit-name="${CSS.escape(id)}"]`).value.trim();
+          try {
+            await api('/platform/devices/' + encodeURIComponent(id), {
+              method: 'PATCH',
+              body: JSON.stringify({ name }),
+            });
+            toast('Device saved');
+            await openSchool(state.selectedId);
+          } catch (e) { toast(fmtDetail(e), false); }
+        };
+      });
+      rows.querySelectorAll('[data-toggle]').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute('data-toggle');
+          const active = btn.getAttribute('data-active') === '1';
+          try {
+            await api('/platform/devices/' + encodeURIComponent(id), {
+              method: 'PATCH',
+              body: JSON.stringify({ is_active: !active }),
+            });
+            toast(active ? 'Device disabled' : 'Device enabled');
+            await openSchool(state.selectedId);
+          } catch (e) { toast(fmtDetail(e), false); }
+        };
+      });
+      rows.querySelectorAll('[data-regen]').forEach(btn => {
+        btn.onclick = async () => {
+          if (!confirm('Generate a new token for this device? The old token will stop working.')) return;
+          const id = btn.getAttribute('data-regen');
+          try {
+            const data = await api('/platform/devices/' + encodeURIComponent(id) + '/regenerate-token', { method: 'POST' });
+            showDeviceSecret(data);
+            await openSchool(state.selectedId);
+          } catch (e) { toast(fmtDetail(e), false); }
+        };
+      });
+    }
+
+    function showDeviceSecret(data) {
+      const box = $('deviceFlash');
+      box.hidden = false;
+      box.textContent =
+        'APK Settings\n' +
+        '  Face URL:     ' + location.origin + '\n' +
+        '  Device no:    ' + data.id + '\n' +
+        '  Device token: ' + data.token + '\n\n' +
+        'Copy now — token is not stored in plain text.';
+      toast('New device token created — copy it now');
+    }
+
+    async function addSchool() {
+      try {
+        const data = await api('/platform/tenants', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: $('schoolName').value.trim(),
+            crm_base_url: $('crmUrl').value.trim(),
+            create_device: true,
+            device_id: $('deviceNo').value.trim() || null,
+            device_name: $('deviceName').value.trim() || 'Gate 1',
+          }),
+        });
+        const d = (data.devices && data.devices[0]) || {};
+        const flash = $('createFlash');
+        flash.hidden = false;
+        flash.textContent =
+          'CRM\n  Face URL: ' + location.origin + '\n  Client code: ' + data.client_code + '\n\n' +
+          'APK\n  Face URL: ' + location.origin + '\n  Device no: ' + (d.id || '') + '\n  Device token: ' + (d.token || '');
+        toast('School client created');
+        await loadSchools();
+        await openSchool(data.id);
+      } catch (e) { toast(fmtDetail(e), false); }
+    }
+
+    async function saveSchool() {
+      try {
+        await api('/platform/tenants/' + state.selectedId, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: $('editName').value.trim(),
+            crm_base_url: $('editCrm').value.trim(),
+          }),
+        });
+        toast('School saved');
+        await loadSchools();
+      } catch (e) { toast(fmtDetail(e), false); }
+    }
+
+    async function toggleSchool() {
+      try {
+        await api('/platform/tenants/' + state.selectedId, {
+          method: 'PATCH',
+          body: JSON.stringify({ is_active: !(state.detail && state.detail.is_active) }),
+        });
+        toast('School status updated');
+        await loadSchools();
+      } catch (e) { toast(fmtDetail(e), false); }
+    }
+
+    async function addDevice() {
+      try {
+        const data = await api('/platform/tenants/' + state.selectedId + '/devices', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: $('newDeviceName').value.trim() || 'Gate',
+            device_id: $('newDeviceNo').value.trim() || null,
+          }),
+        });
+        showDeviceSecret(data);
+        $('newDeviceNo').value = '';
+        await openSchool(state.selectedId);
+        await loadSchools();
+      } catch (e) { toast(fmtDetail(e), false); }
+    }
+
+    function copySetup() {
+      if (!state.detail) return;
+      const devices = (state.detail.devices || []).map(d => '  - ' + d.id + ' · ' + d.name + (d.is_active ? '' : ' (disabled)')).join('\n');
+      const text =
+        'Face Platform setup\n' +
+        'Face URL: ' + location.origin + '\n' +
+        'School: ' + state.detail.name + '\n' +
+        'Client code: ' + state.detail.client_code + '\n' +
+        'CRM: ' + state.detail.crm_base_url + '\n' +
+        'Devices:\n' + (devices || '  (none)') + '\n' +
+        'Note: regenerate a device token if you need the plain token again.';
+      navigator.clipboard.writeText(text).then(() => toast('Copied setup notes')).catch(() => toast(text));
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    $('adminToken').value = state.token;
+    $('btnUnlock').onclick = unlock;
+    $('btnRefresh').onclick = () => loadSchools().catch(e => toast(fmtDetail(e), false));
+    $('btnAddSchool').onclick = addSchool;
+    $('btnSaveSchool').onclick = saveSchool;
+    $('btnToggleSchool').onclick = toggleSchool;
+    $('btnAddDevice').onclick = addDevice;
+    $('btnCopySetup').onclick = copySetup;
+    $('adminToken').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock(); });
+
+    if (state.token) {
+      loadSchools().catch(() => {});
+    }
+  </script>
+</body>
+</html>

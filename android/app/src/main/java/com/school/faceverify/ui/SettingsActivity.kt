@@ -36,12 +36,8 @@ class SettingsActivity : AppCompatActivity() {
                 apiBaseUrl = binding.inputApiUrl.text?.toString()
                     ?.ifBlank { KioskConfig.DEFAULT_API_URL }
                     ?: KioskConfig.DEFAULT_API_URL,
-                deviceId = binding.inputDeviceId.text?.toString()
-                    ?.ifBlank { KioskConfig.DEFAULT_DEVICE_ID }
-                    ?: KioskConfig.DEFAULT_DEVICE_ID,
-                deviceToken = binding.inputDeviceToken.text?.toString()
-                    ?.ifBlank { KioskConfig.DEFAULT_DEVICE_TOKEN }
-                    ?: KioskConfig.DEFAULT_DEVICE_TOKEN,
+                deviceId = binding.inputDeviceId.text?.toString()?.trim().orEmpty(),
+                deviceToken = binding.inputDeviceToken.text?.toString()?.trim().orEmpty(),
                 threshold = threshold,
                 cameraAttendanceMode = false,
             )

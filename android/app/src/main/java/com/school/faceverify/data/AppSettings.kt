@@ -21,10 +21,10 @@ data class KioskConfig(
     val cameraAttendanceMode: Boolean = false,
 ) {
     companion object {
-        // Short numbers — create matching device on Face API (POST /devices with id + token).
-        const val DEFAULT_API_URL = "https://face.folksindia.org"
-        const val DEFAULT_DEVICE_ID = "1001"
-        const val DEFAULT_DEVICE_TOKEN = "48291573"
+        // Shared Face Platform for all schools. Per-school pairing = device number + token.
+        const val DEFAULT_API_URL = "https://face.taskbook.co.in"
+        const val DEFAULT_DEVICE_ID = ""
+        const val DEFAULT_DEVICE_TOKEN = ""
         const val DEFAULT_THRESHOLD = 0.30f
     }
 }
@@ -51,8 +51,8 @@ class AppSettings(private val context: Context) {
     suspend fun save(config: KioskConfig) {
         context.dataStore.edit { prefs ->
             prefs[keyApi] = config.apiBaseUrl.trim().trimEnd('/').ifBlank { KioskConfig.DEFAULT_API_URL }
-            prefs[keyDeviceId] = config.deviceId.trim().ifBlank { KioskConfig.DEFAULT_DEVICE_ID }
-            prefs[keyToken] = config.deviceToken.trim().ifBlank { KioskConfig.DEFAULT_DEVICE_TOKEN }
+            prefs[keyDeviceId] = config.deviceId.trim()
+            prefs[keyToken] = config.deviceToken.trim()
             prefs[keyThreshold] = config.threshold
             prefs[keyCameraAttendanceMode] = config.cameraAttendanceMode
         }

@@ -111,8 +111,72 @@ class DeviceOut(BaseModel):
     name: str
     gate: str | None
     is_active: int
+    tenant_id: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class TenantCreateIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    crm_base_url: str = Field(..., min_length=8, max_length=512)
+    timezone: str = "Asia/Kolkata"
+    create_device: bool = True
+    device_id: str | None = Field(default=None, min_length=1, max_length=36, pattern=r"^[0-9A-Za-z_-]+$")
+    device_name: str = "Gate 1"
+    device_token: str | None = Field(default=None, min_length=6, max_length=64)
+
+
+class TenantDeviceOut(BaseModel):
+    id: str
+    name: str
+    token: str | None = None
+
+
+class TenantCreateOut(BaseModel):
+    id: str
+    name: str
+    client_code: str
+    crm_base_url: str
+    service_token: str
+    callback_secret: str
+    timezone: str
+    devices: list[TenantDeviceOut] = []
+
+
+class TenantListItem(BaseModel):
+    id: str
+    name: str
+    client_code: str
+    crm_base_url: str
+    timezone: str
+    is_active: int
+    device_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class TenantConnectIn(BaseModel):
+    client_code: str = Field(..., min_length=4, max_length=32)
+    crm_base_url: str = Field(..., min_length=8, max_length=512)
+
+
+class TenantConnectOut(BaseModel):
+    ok: bool = True
+    tenant_id: str
+    name: str
+    client_code: str
+    crm_base_url: str
+    service_token: str
+    callback_secret: str
+    timezone: str
+    devices: list[TenantDeviceOut] = []
+
+
+class TenantAddDeviceIn(BaseModel):
+    name: str = "Gate"
+    device_id: str | None = Field(default=None, min_length=1, max_length=36, pattern=r"^[0-9A-Za-z_-]+$")
+    token: str | None = Field(default=None, min_length=6, max_length=64)
+    gate: str | None = None
 
 
 class VerificationRequestCreate(BaseModel):

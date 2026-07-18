@@ -1,4 +1,6 @@
 import enum
+import secrets
+import string
 import uuid
 from datetime import datetime
 
@@ -23,6 +25,16 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
+def generate_client_code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    body = "".join(secrets.choice(alphabet) for _ in range(6))
+    return f"TB-{body}"
+
+
+def generate_secret() -> str:
+    return secrets.token_urlsafe(32)
+
+
 class VerificationStatus(str, enum.Enum):
     PENDING = "PENDING"
     PASS = "PASS"
@@ -30,11 +42,45 @@ class VerificationStatus(str, enum.Enum):
     TIMEOUT = "TIMEOUT"
 
 
-class Student(Base):
-    __tablename__ = "students"
+class Tenant(Base):
+    """One school CRM install (Folks, Motion, PalDigital, …)."""
+
+    __tablename__ = "tenants"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    enrollment_number: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    client_code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    crm_base_url: Mapped[str] = mapped_column(String(512))
+    service_token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    callback_secret: Mapped[str] = mapped_column(String(128))
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
+    is_active: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    devices: Mapped[list["Device"]] = relationship(back_populates="tenant")
+    students: Mapped[list["Student"]] = relationship(back_populates="tenant")
+
+    @property
+    def approve_url(self) -> str:
+        return f"{self.crm_base_url.rstrip('/')}/api/face-verify/approve"
+
+    @property
+    def camera_punch_url(self) -> str:
+        return f"{self.crm_base_url.rstrip('/')}/api/face-verify/camera-punch"
+
+
+class Student(Base):
+    __tablename__ = "students"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "enrollment_number", name="ix_students_tenant_enrollment"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True)
+    enrollment_number: Mapped[str] = mapped_column(String(64), index=True)
     name: Mapped[str] = mapped_column(String(255))
     batch: Mapped[str | None] = mapped_column(String(128), nullable=True)
     crm_student_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -43,6 +89,7 @@ class Student(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    tenant: Mapped["Tenant"] = relationship(back_populates="students")
     templates: Mapped[list["FaceTemplate"]] = relationship(back_populates="student")
     images: Mapped[list["FaceImage"]] = relationship(back_populates="student")
 
@@ -80,11 +127,14 @@ class Device(Base):
     __tablename__ = "devices"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True)
     name: Mapped[str] = mapped_column(String(128))
     gate: Mapped[str | None] = mapped_column(String(128), nullable=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
     is_active: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    tenant: Mapped["Tenant"] = relationship(back_populates="devices")
 
 
 class VerificationRequest(Base):

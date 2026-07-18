@@ -19,9 +19,14 @@ class Settings(BaseSettings):
     crm_service_token: str = "change-me-crm-service-token"
     device_token_pepper: str = "change-me-device-pepper"
 
+    # Legacy single-school fallback (used only if a tenant has no CRM URL yet).
     crm_callback_url: str = "http://localhost/api/face-verify/approve"
     crm_camera_punch_url: str | None = None
     crm_callback_secret: str = "change-me-crm-callback-secret"
+
+    # Vendor admin: create/list tenants on the Face Platform.
+    # Falls back to CRM_SERVICE_TOKEN when unset (dev convenience).
+    platform_admin_token: str | None = None
 
     face_model_name: str = "buffalo_l"
     face_model_version: str = "w600k_r50"

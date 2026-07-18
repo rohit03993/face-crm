@@ -6,11 +6,11 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.auth import require_crm_or_device, require_crm_token
+from app.auth import require_crm_or_device, require_crm_token, require_tenant_crm
 from app.config import get_settings
 from app.db import get_db
 from app.face_engine import average_embeddings, decode_image_bytes, extract_embedding
-from app.models import FaceImage, FaceTemplate, FailCapture, Student, VerificationRequest
+from app.models import FaceImage, FaceTemplate, FailCapture, Student, Tenant, VerificationRequest
 from app.schemas import (
     EmbeddingOut,
     EnrollResponse,
@@ -29,25 +29,26 @@ router = APIRouter(prefix="/students", tags=["students"])
 settings = get_settings()
 
 
-@router.post("", response_model=StudentOut, dependencies=[Depends(require_crm_token)])
-def upsert_student(body: StudentCreate, db: Session = Depends(get_db)) -> Student:
-    student = _upsert_student(body, db)
+@router.post("", response_model=StudentOut)
+def upsert_student(
+    body: StudentCreate,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(require_tenant_crm),
+) -> Student:
+    student = _upsert_student(body, db, tenant_id=tenant.id)
     db.commit()
     db.refresh(student)
     return student
 
 
-@router.post(
-    "/bulk-sync",
-    response_model=StudentBulkSyncOut,
-    dependencies=[Depends(require_crm_token)],
-)
+@router.post("/bulk-sync", response_model=StudentBulkSyncOut)
 def bulk_sync_students(
     body: StudentBulkSyncIn,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(require_tenant_crm),
 ) -> StudentBulkSyncOut:
     for student in body.students:
-        _upsert_student(student, db)
+        _upsert_student(student, db, tenant_id=tenant.id)
     db.commit()
     return StudentBulkSyncOut(synced=len(body.students))
 
@@ -55,9 +56,15 @@ def bulk_sync_students(
 @router.get("", response_model=list[StudentListItem])
 def list_students(
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> list[StudentListItem]:
-    students = db.query(Student).order_by(Student.enrollment_number.asc()).all()
+    _kind, device, tenant = auth
+    q = db.query(Student)
+    if device is not None:
+        q = q.filter(Student.tenant_id == device.tenant_id)
+    elif tenant is not None:
+        q = q.filter(Student.tenant_id == tenant.id)
+    students = q.order_by(Student.enrollment_number.asc()).all()
     items: list[StudentListItem] = []
     for student in students:
         template = (
@@ -81,13 +88,19 @@ def list_students(
     return items
 
 
-def _upsert_student(body: StudentCreate, db: Session) -> Student:
+def _upsert_student(body: StudentCreate, db: Session, *, tenant_id: str) -> Student:
     enrollment = body.enrollment_number.strip().upper()
     existing = None
     if body.id:
         existing = db.get(Student, body.id)
+        if existing and existing.tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail="Student belongs to another school")
     if existing is None:
-        existing = db.query(Student).filter(Student.enrollment_number == enrollment).first()
+        existing = (
+            db.query(Student)
+            .filter(Student.tenant_id == tenant_id, Student.enrollment_number == enrollment)
+            .first()
+        )
 
     if existing:
         existing.name = body.name
@@ -98,6 +111,7 @@ def _upsert_student(body: StudentCreate, db: Session) -> Student:
         return existing
 
     student = Student(
+        tenant_id=tenant_id,
         enrollment_number=enrollment,
         name=body.name,
         batch=body.batch,
@@ -109,12 +123,26 @@ def _upsert_student(body: StudentCreate, db: Session) -> Student:
     return student
 
 
-def _resolve_student(db: Session, student_id: str) -> Student:
+def _tenant_id_from_auth(auth: tuple) -> str | None:
+    _kind, device, tenant = auth
+    if device is not None:
+        return device.tenant_id
+    if tenant is not None:
+        return tenant.id
+    return None
+
+
+def _resolve_student(db: Session, student_id: str, *, tenant_id: str | None = None) -> Student:
     student = db.get(Student, student_id)
     if student is None:
         enr = student_id.strip().upper()
-        student = db.query(Student).filter(Student.enrollment_number == enr).first()
+        q = db.query(Student).filter(Student.enrollment_number == enr)
+        if tenant_id:
+            q = q.filter(Student.tenant_id == tenant_id)
+        student = q.first()
     if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    if tenant_id and student.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
 
@@ -143,7 +171,11 @@ def _apply_student_update(student: Student, body: StudentUpdate, db: Session) ->
         new_enr = body.enrollment_number.strip().upper()
         clash = (
             db.query(Student)
-            .filter(Student.enrollment_number == new_enr, Student.id != student.id)
+            .filter(
+                Student.tenant_id == student.tenant_id,
+                Student.enrollment_number == new_enr,
+                Student.id != student.id,
+            )
             .first()
         )
         if clash:
@@ -186,15 +218,18 @@ def _find_duplicate_face(
     embedding: np.ndarray,
     *,
     exclude_student_id: str | None = None,
+    tenant_id: str | None = None,
 ) -> tuple[Student, float] | None:
     """Return best matching enrolled student if similarity looks like the same person."""
     threshold = float(settings.duplicate_face_threshold)
-    enrolled = (
+    q = (
         db.query(FaceTemplate, Student)
         .join(Student, Student.id == FaceTemplate.student_id)
         .filter(FaceTemplate.model_version == settings.face_model_version)
-        .all()
     )
+    if tenant_id:
+        q = q.filter(Student.tenant_id == tenant_id)
+    enrolled = q.all()
     best_student: Student | None = None
     best_score = -1.0
     for template, student in enrolled:
@@ -220,8 +255,14 @@ def _reject_if_duplicate(
     embedding: np.ndarray,
     *,
     exclude_student_id: str | None = None,
+    tenant_id: str | None = None,
 ) -> None:
-    hit = _find_duplicate_face(db, embedding, exclude_student_id=exclude_student_id)
+    hit = _find_duplicate_face(
+        db,
+        embedding,
+        exclude_student_id=exclude_student_id,
+        tenant_id=tenant_id,
+    )
     if hit is None:
         return
     student, score = hit
@@ -241,6 +282,7 @@ def _save_phone_template(
     *,
     student_key: str,
     body: EnrollTemplateIn,
+    tenant_id: str,
 ) -> EnrollResponse:
     if body.model_version != settings.face_model_version:
         raise HTTPException(
@@ -254,15 +296,21 @@ def _save_phone_template(
     emb = _normalize_embedding(body.embedding)
 
     student = db.get(Student, student_key)
+    if student is not None and student.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Student not found")
     if student is None:
         enr = student_key.strip().upper()
-        student = db.query(Student).filter(Student.enrollment_number == enr).first()
+        student = (
+            db.query(Student)
+            .filter(Student.tenant_id == tenant_id, Student.enrollment_number == enr)
+            .first()
+        )
     if not student:
         enr = (body.enrollment_number or student_key).strip().upper()
         if not enr:
             raise HTTPException(status_code=404, detail="Student not found")
         display_name = (body.name or enr).strip() or enr
-        student = Student(enrollment_number=enr, name=display_name)
+        student = Student(tenant_id=tenant_id, enrollment_number=enr, name=display_name)
         db.add(student)
         db.flush()
     elif body.name and body.name.strip() and student.name != body.name.strip():
@@ -270,7 +318,7 @@ def _save_phone_template(
 
     sid = student.id
     # Block saving Rohit's face under Neha (etc.). Re-enrolling the same student is OK.
-    _reject_if_duplicate(db, emb, exclude_student_id=sid)
+    _reject_if_duplicate(db, emb, exclude_student_id=sid, tenant_id=tenant_id)
 
     _clear_face_data(db, sid)
     db.flush()
@@ -299,7 +347,7 @@ def _save_phone_template(
 def check_face_duplicate(
     body: FaceCheckIn,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> FaceCheckOut:
     """Kiosk can call this after a capture to warn early about duplicate faces."""
     if body.model_version != settings.face_model_version:
@@ -312,7 +360,13 @@ def check_face_duplicate(
         )
     emb = _normalize_embedding(body.embedding)
     threshold = float(settings.duplicate_face_threshold)
-    hit = _find_duplicate_face(db, emb, exclude_student_id=body.exclude_student_id)
+    tenant_id = _tenant_id_from_auth(auth)
+    hit = _find_duplicate_face(
+        db,
+        emb,
+        exclude_student_id=body.exclude_student_id,
+        tenant_id=tenant_id,
+    )
     if hit is None:
         return FaceCheckOut(
             duplicate=False,
@@ -338,12 +392,15 @@ def check_face_duplicate(
 def enroll_template_collection(
     body: EnrollTemplateIn,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> EnrollResponse:
     key = (body.student_id or body.enrollment_number or "").strip()
     if not key:
         raise HTTPException(status_code=422, detail="student_id or enrollment_number required")
-    return _save_phone_template(db, student_key=key, body=body)
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+    return _save_phone_template(db, student_key=key, body=body, tenant_id=tenant_id)
 
 
 @router.post("/{student_id}/update", response_model=StudentOut)
@@ -351,9 +408,9 @@ def update_student_post(
     student_id: str,
     body: StudentUpdate,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> Student:
-    student = _resolve_student(db, student_id)
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     _apply_student_update(student, body, db)
     db.commit()
     db.refresh(student)
@@ -364,9 +421,9 @@ def update_student_post(
 def remove_student_post(
     student_id: str,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> dict:
-    student = _resolve_student(db, student_id)
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     sid = student.id
     _delete_student_cascade(db, student)
     db.commit()
@@ -377,9 +434,9 @@ def remove_student_post(
 def get_student(
     student_id: str,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> Student:
-    return _resolve_student(db, student_id)
+    return _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
 
 
 @router.patch("/{student_id}", response_model=StudentOut)
@@ -387,9 +444,9 @@ def update_student(
     student_id: str,
     body: StudentUpdate,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> Student:
-    student = _resolve_student(db, student_id)
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     _apply_student_update(student, body, db)
     db.commit()
     db.refresh(student)
@@ -400,9 +457,9 @@ def update_student(
 def delete_student(
     student_id: str,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> None:
-    student = _resolve_student(db, student_id)
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     _delete_student_cascade(db, student)
     db.commit()
 
@@ -412,10 +469,13 @@ def enroll_student_template(
     student_id: str,
     body: EnrollTemplateIn,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> EnrollResponse:
     """Store a phone-computed face template only (no InsightFace, no image files)."""
-    return _save_phone_template(db, student_key=student_id, body=body)
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+    return _save_phone_template(db, student_key=student_id, body=body, tenant_id=tenant_id)
 
 
 @router.post("/{student_id}/enroll", response_model=EnrollResponse)
@@ -425,20 +485,30 @@ async def enroll_student(
     angles: str | None = Form(default=None),
     name: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> EnrollResponse:
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+
     # Accept UUID or enrollment_number (e.g. STU001 / FI 0801)
     student = db.get(Student, student_id)
+    if student is not None and student.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Student not found")
     if student is None:
         enr = student_id.strip().upper()
-        student = db.query(Student).filter(Student.enrollment_number == enr).first()
+        student = (
+            db.query(Student)
+            .filter(Student.tenant_id == tenant_id, Student.enrollment_number == enr)
+            .first()
+        )
     if not student:
         # Kiosk can register a new student while capturing faces.
         enr = student_id.strip().upper()
         if not enr:
             raise HTTPException(status_code=404, detail="Student not found")
         display_name = (name or enr).strip() or enr
-        student = Student(enrollment_number=enr, name=display_name)
+        student = Student(tenant_id=tenant_id, enrollment_number=enr, name=display_name)
         db.add(student)
         db.commit()
         db.refresh(student)
@@ -466,7 +536,7 @@ async def enroll_student(
         decoded.append((img, angle))
 
     template_vec = average_embeddings(embeddings)
-    _reject_if_duplicate(db, template_vec, exclude_student_id=student_id)
+    _reject_if_duplicate(db, template_vec, exclude_student_id=student_id, tenant_id=tenant_id)
 
     # Re-enroll replaces previous face photos/templates for this student.
     _clear_face_data(db, student_id)
@@ -515,15 +585,13 @@ async def enroll_student(
 def get_embedding(
     student_id: str,
     db: Session = Depends(get_db),
-    _auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device),
 ) -> EmbeddingOut:
-    student = db.get(Student, student_id)
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     template = (
         db.query(FaceTemplate)
         .filter(
-            FaceTemplate.student_id == student_id,
+            FaceTemplate.student_id == student.id,
             FaceTemplate.model_version == settings.face_model_version,
         )
         .first()

@@ -79,8 +79,12 @@ async def create_verification_request(
         student = db.get(Student, body.student_id)
     elif body.enrollment_number:
         enr = body.enrollment_number.strip().upper()
-        student = db.query(Student).filter(Student.enrollment_number == enr).first()
-    if not student:
+        student = (
+            db.query(Student)
+            .filter(Student.tenant_id == device.tenant_id, Student.enrollment_number == enr)
+            .first()
+        )
+    if not student or student.tenant_id != device.tenant_id:
         raise HTTPException(status_code=404, detail="Student not found")
 
     template = (
@@ -155,7 +159,10 @@ async def camera_identify(
     enrolled = (
         db.query(FaceTemplate, Student)
         .join(Student, Student.id == FaceTemplate.student_id)
-        .filter(FaceTemplate.model_version == settings.face_model_version)
+        .filter(
+            FaceTemplate.model_version == settings.face_model_version,
+            Student.tenant_id == device.tenant_id,
+        )
         .all()
     )
     if not enrolled:

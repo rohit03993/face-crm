@@ -15,11 +15,16 @@
 ## Production Face API `.env`
 
 ```env
-CRM_CALLBACK_URL=https://folksindia.org/api/face-verify/approve
-CRM_CAMERA_PUNCH_URL=https://folksindia.org/api/face-verify/camera-punch
+PLATFORM_ADMIN_TOKEN=<vendor-secret>
+APP_TIMEZONE=Asia/Kolkata
 CAMERA_PUNCH_COOLDOWN_SECONDS=60
 ```
 
-Restart the API container after changing `.env`.
+Add schools via `/platform/admin` (or `POST /platform/tenants`).  
+Each school CRM connects with **Face URL + client code** (Setup → Face camera connect).  
+APK uses **Face URL + device number + token**.
 
-RFID WebSocket verification remains available as an advanced Settings option.
+See [MULTI_TENANT_FACE_PLATFORM.md](MULTI_TENANT_FACE_PLATFORM.md).
+
+Legacy single-school env URLs (`CRM_CALLBACK_URL` / `CRM_CAMERA_PUNCH_URL`) remain as fallback only.
+

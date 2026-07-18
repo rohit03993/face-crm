@@ -81,7 +81,7 @@
     <string name="device_id">Device number</string>
     <string name="device_id_hint">From Face admin when the school was added, e.g. 1001</string>
     <string name="device_token">Device token</string>
-    <string name="device_token_hint">Shown once with the device number on Face admin</string>
+    <string name="device_token_hint">Letters and numbers OK (from Face admin)</string>
     <string name="threshold">Match threshold</string>
     <string name="camera_attendance_mode">Legacy RFID verify screen</string>
     <string name="camera_attendance_mode_hint">Optional advanced mode. Normal schools should use Ready for punch from Home.</string>

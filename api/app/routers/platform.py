@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import re
+import secrets
+import string
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.auth import generate_token, hash_token, require_platform_admin
+from app.auth import hash_token, require_platform_admin
 from app.db import get_db
 from app.models import Device, Tenant, generate_client_code, generate_secret
 from app.schemas import (
@@ -52,6 +53,11 @@ def _unique_client_code(db: Session) -> str:
     raise HTTPException(status_code=500, detail="Could not allocate client code")
 
 
+def _kiosk_device_token() -> str:
+    """Digits-only so kiosk keyboards (and older APKs) can type the token easily."""
+    return "".join(secrets.choice(string.digits) for _ in range(8))
+
+
 def _create_device_for_tenant(
     db: Session,
     tenant: Tenant,
@@ -61,10 +67,7 @@ def _create_device_for_tenant(
     token: str | None,
     gate: str | None = None,
 ) -> tuple[Device, str]:
-    plain = (token or "").strip() or generate_token()[:12]
-    # Prefer short numeric tokens for kiosk typing when auto-generated.
-    if token is None and re.fullmatch(r"[A-Za-z0-9_-]+", plain) and len(plain) > 12:
-        plain = "".join(c for c in plain if c.isalnum())[:8] or generate_token()[:8]
+    plain = (token or "").strip() or _kiosk_device_token()
 
     token_hash = hash_token(plain)
     if db.query(Device).filter(Device.token_hash == token_hash).first():

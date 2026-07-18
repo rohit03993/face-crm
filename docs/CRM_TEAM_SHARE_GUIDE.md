@@ -183,7 +183,7 @@ POST /api/face-verify/approve
   "device_id": "face-api-device-uuid",
   "score": 0.51,
   "status": "PASS",
-  "timestamp": "2026-07-17T00:00:00+00:00"
+  "timestamp": "2026-07-17T05:30:00+05:30"
 }
 ```
 

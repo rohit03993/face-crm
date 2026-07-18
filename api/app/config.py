@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     debug: bool = True
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    # Used for CRM punch timestamps (Live Punches wall-clock).
+    app_timezone: str = "Asia/Kolkata"
 
     database_url: str = "mysql+pymysql://face:face@127.0.0.1:3307/face_verify"
 

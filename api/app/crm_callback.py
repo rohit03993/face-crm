@@ -6,7 +6,8 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -15,6 +16,12 @@ from app.models import VerificationRequest
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _crm_timestamp() -> str:
+    """Wall-clock for CRM punch_logs — Indian local time by default."""
+    tz = ZoneInfo(settings.app_timezone or "Asia/Kolkata")
+    return datetime.now(tz).isoformat(timespec="seconds")
 
 
 def _sign(body: bytes) -> str:
@@ -75,7 +82,7 @@ async def notify_crm_pass(req: VerificationRequest, student_enrollment: str) -> 
         "device_id": req.device_id,
         "score": req.score,
         "status": "PASS",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": _crm_timestamp(),
     }
     result = await _post_signed(settings.crm_callback_url, payload)
     if result is None:
@@ -102,7 +109,7 @@ async def notify_crm_camera_punch(
         "enrollment_number": enrollment_number,
         "device_id": device_id,
         "score": score,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": _crm_timestamp(),
     }
     result = await _post_signed(url, payload)
     if result is not None:

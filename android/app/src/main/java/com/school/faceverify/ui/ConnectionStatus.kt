@@ -9,6 +9,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.R
+import com.school.faceverify.net.DeviceAuthResult
 import com.school.faceverify.net.FaceApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,44 +22,76 @@ import kotlinx.coroutines.withContext
 /** Shared online / offline pill used across Home, Students, Enroll, Attendance. */
 object ConnectionStatus {
 
-    fun bind(dot: View, label: TextView, online: Boolean?, context: Context) {
-        when (online) {
-            null -> {
+    enum class State {
+        Checking,
+        Connected,
+        Offline,
+        Unauthorized,
+    }
+
+    fun bind(dot: View, label: TextView, state: State, context: Context) {
+        when (state) {
+            State.Checking -> {
                 label.text = context.getString(R.string.status_checking)
                 setDot(dot, context, R.color.amber)
             }
-            true -> {
+            State.Connected -> {
                 label.text = context.getString(R.string.status_connected)
                 setDot(dot, context, R.color.pass)
             }
-            false -> {
+            State.Offline -> {
                 label.text = context.getString(R.string.status_offline)
+                setDot(dot, context, R.color.fail)
+            }
+            State.Unauthorized -> {
+                label.text = context.getString(R.string.status_unauthorized)
                 setDot(dot, context, R.color.fail)
             }
         }
     }
 
+    /** Legacy Boolean binder — true/false/null map to Connected/Offline/Checking. */
+    fun bind(dot: View, label: TextView, online: Boolean?, context: Context) {
+        bind(
+            dot,
+            label,
+            when (online) {
+                null -> State.Checking
+                true -> State.Connected
+                false -> State.Offline
+            },
+            context,
+        )
+    }
+
     /**
-     * Polls Face API health while the screen is visible.
-     * Returns a Job the caller can cancel in onPause if needed.
+     * Polls authenticated device credentials while the screen is visible.
+     * /health alone is not used — it ignores device token.
      */
     fun startPolling(
         owner: LifecycleOwner,
         intervalMs: Long = 8_000L,
-        onStatus: (Boolean?) -> Unit,
+        onStatus: (State) -> Unit,
     ): Job {
-        onStatus(null)
+        onStatus(State.Checking)
         return owner.lifecycleScope.launch {
             while (isActive) {
-                val online = withContext(Dispatchers.IO) {
+                val state = withContext(Dispatchers.IO) {
                     try {
                         val cfg = FaceVerifyApp.instance.settings.configFlow.first()
-                        FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).healthQuick()
+                        when (
+                            FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
+                                .verifyDeviceCredentials(cfg.deviceId)
+                        ) {
+                            DeviceAuthResult.Ok -> State.Connected
+                            DeviceAuthResult.Offline -> State.Offline
+                            is DeviceAuthResult.Failed -> State.Unauthorized
+                        }
                     } catch (_: Exception) {
-                        false
+                        State.Offline
                     }
                 }
-                onStatus(online)
+                onStatus(state)
                 delay(intervalMs)
             }
         }

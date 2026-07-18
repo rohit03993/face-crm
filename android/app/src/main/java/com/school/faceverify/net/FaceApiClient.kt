@@ -33,6 +33,12 @@ data class StudentListItem(
     val imageCount: Int,
 )
 
+sealed class DeviceAuthResult {
+    data object Ok : DeviceAuthResult()
+    data object Offline : DeviceAuthResult()
+    data class Failed(val message: String) : DeviceAuthResult()
+}
+
 class FaceApiClient(
     private val apiBaseUrl: String,
     private val deviceToken: String,
@@ -291,6 +297,75 @@ class FaceApiClient(
             healthClient.newCall(request).execute().use { it.isSuccessful }
         } catch (_: Exception) {
             false
+        }
+    }
+
+    /**
+     * Confirms Face URL is reachable and device token (and optional device id) are valid.
+     * /health alone is not enough — it does not require auth.
+     */
+    fun verifyDeviceCredentials(expectedDeviceId: String): DeviceAuthResult {
+        val expectedId = expectedDeviceId.trim()
+        if (deviceToken.isBlank()) {
+            return DeviceAuthResult.Failed("Enter device token")
+        }
+        if (expectedId.isBlank()) {
+            return DeviceAuthResult.Failed("Enter device ID")
+        }
+        return try {
+            val meReq = Request.Builder()
+                .url("$base/devices/me")
+                .header("Authorization", "Bearer $deviceToken")
+                .get()
+                .build()
+            healthClient.newCall(meReq).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                when {
+                    resp.isSuccessful -> {
+                        val remoteId = try {
+                            JSONObject(raw).optString("id").trim()
+                        } catch (_: Exception) {
+                            ""
+                        }
+                        if (remoteId.isNotBlank() && remoteId != expectedId) {
+                            DeviceAuthResult.Failed(
+                                "Device ID does not match this token (server has $remoteId)",
+                            )
+                        } else {
+                            DeviceAuthResult.Ok
+                        }
+                    }
+                    resp.code == 401 || resp.code == 403 ->
+                        DeviceAuthResult.Failed("Invalid device token")
+                    resp.code == 404 -> verifyViaStudentsFallback()
+                    else -> DeviceAuthResult.Failed(friendlyError(resp.code, raw))
+                }
+            }
+        } catch (_: Exception) {
+            DeviceAuthResult.Offline
+        }
+    }
+
+    /** Older Face API without /devices/me — token-only check via /students. */
+    private fun verifyViaStudentsFallback(): DeviceAuthResult {
+        return try {
+            val request = Request.Builder()
+                .url("$base/students")
+                .header("Authorization", "Bearer $deviceToken")
+                .get()
+                .build()
+            healthClient.newCall(request).execute().use { resp ->
+                when {
+                    resp.isSuccessful -> DeviceAuthResult.Ok
+                    resp.code == 401 || resp.code == 403 ->
+                        DeviceAuthResult.Failed("Invalid device token")
+                    else -> DeviceAuthResult.Failed(
+                        friendlyError(resp.code, resp.body?.string().orEmpty()),
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            DeviceAuthResult.Offline
         }
     }
 

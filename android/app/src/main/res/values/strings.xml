@@ -36,6 +36,10 @@
     <string name="status_checking">Checking…</string>
     <string name="status_connected">Connected</string>
     <string name="status_offline">Offline</string>
+    <string name="status_unauthorized">Bad device login</string>
+    <string name="settings_verifying">Checking device ID and token…</string>
+    <string name="settings_saved">Saved — device verified</string>
+    <string name="settings_verify_offline">Cannot reach Face URL — check Wi‑Fi and URL</string>
     <string name="students_offline_hint">Offline — cannot load students. Check Settings or retry.</string>
     <string name="retry">Retry</string>
     <string name="enroll_saving_title">Saving student</string>

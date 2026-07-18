@@ -6,11 +6,16 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
+import com.school.faceverify.R
 import com.school.faceverify.data.KioskConfig
 import com.school.faceverify.databinding.ActivitySettingsBinding
+import com.school.faceverify.net.DeviceAuthResult
+import com.school.faceverify.net.FaceApiClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySettingsBinding
@@ -41,19 +46,53 @@ class SettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            val deviceId = binding.inputDeviceId.text?.toString()?.trim().orEmpty()
+            val deviceToken = binding.inputDeviceToken.text?.toString()?.trim().orEmpty()
+            if (deviceId.isBlank()) {
+                Toast.makeText(this, "Enter device ID", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            if (deviceToken.isBlank()) {
+                Toast.makeText(this, "Enter device token", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
             val threshold = binding.inputThreshold.text?.toString()?.toFloatOrNull()
                 ?: KioskConfig.DEFAULT_THRESHOLD
             val cfg = KioskConfig(
                 apiBaseUrl = url,
-                deviceId = binding.inputDeviceId.text?.toString()?.trim().orEmpty(),
-                deviceToken = binding.inputDeviceToken.text?.toString()?.trim().orEmpty(),
+                deviceId = deviceId,
+                deviceToken = deviceToken,
                 threshold = threshold,
                 cameraAttendanceMode = false,
             )
+
+            binding.btnSave.isEnabled = false
+            Toast.makeText(this, R.string.settings_verifying, Toast.LENGTH_SHORT).show()
             lifecycleScope.launch {
-                FaceVerifyApp.instance.settings.save(cfg)
-                Toast.makeText(this@SettingsActivity, "Saved", Toast.LENGTH_SHORT).show()
-                finish()
+                val auth = withContext(Dispatchers.IO) {
+                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
+                        .verifyDeviceCredentials(cfg.deviceId)
+                }
+                when (auth) {
+                    DeviceAuthResult.Ok -> {
+                        FaceVerifyApp.instance.settings.save(cfg)
+                        Toast.makeText(this@SettingsActivity, R.string.settings_saved, Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    DeviceAuthResult.Offline -> {
+                        binding.btnSave.isEnabled = true
+                        Toast.makeText(
+                            this@SettingsActivity,
+                            R.string.settings_verify_offline,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    is DeviceAuthResult.Failed -> {
+                        binding.btnSave.isEnabled = true
+                        Toast.makeText(this@SettingsActivity, auth.message, Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
 
@@ -67,8 +106,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         statusJob?.cancel()
-        statusJob = ConnectionStatus.startPolling(this) { online ->
-            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
+        statusJob = ConnectionStatus.startPolling(this) { state ->
+            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, state, this)
         }
     }
 

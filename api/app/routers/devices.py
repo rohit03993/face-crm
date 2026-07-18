@@ -1,12 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth import hash_token, require_tenant_crm, require_tenant_or_platform
+from app.auth import hash_token, require_device, require_tenant_crm, require_tenant_or_platform
 from app.db import get_db
 from app.models import Device, Tenant
 from app.schemas import DeviceCreate, DeviceOut
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+@router.get("/me", response_model=DeviceOut)
+def current_device(device: Device = Depends(require_device)) -> Device:
+    """APK Settings uses this to verify device id + token before saving."""
+    return device
 
 
 @router.post("", response_model=DeviceOut)

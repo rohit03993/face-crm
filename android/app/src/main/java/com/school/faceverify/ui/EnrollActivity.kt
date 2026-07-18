@@ -28,6 +28,7 @@ import com.school.faceverify.databinding.ActivityEnrollBinding
 import com.school.faceverify.face.ArcFaceEmbedder
 import com.school.faceverify.face.EnrollPose
 import com.school.faceverify.face.FacePipeline
+import com.school.faceverify.net.DeviceAuthResult
 import com.school.faceverify.net.FaceApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -126,9 +127,13 @@ class EnrollActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         statusJob?.cancel()
-        statusJob = ConnectionStatus.startPolling(this) { online ->
-            apiOnline = online
-            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
+        statusJob = ConnectionStatus.startPolling(this) { state ->
+            apiOnline = when (state) {
+                ConnectionStatus.State.Checking -> null
+                ConnectionStatus.State.Connected -> true
+                else -> false
+            }
+            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, state, this)
             if (binding.savingOverlay.visibility != View.VISIBLE) updateUi()
         }
         if (pipeline != null) startAutoCaptureLoop()
@@ -350,16 +355,26 @@ class EnrollActivity : AppCompatActivity() {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 val client = FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
 
-                val healthy = withContext(Dispatchers.IO) { client.healthQuick() }
-                if (!healthy) {
+                val auth = withContext(Dispatchers.IO) {
+                    client.verifyDeviceCredentials(cfg.deviceId)
+                }
+                if (auth !is DeviceAuthResult.Ok) {
                     apiOnline = false
+                    val state = when (auth) {
+                        DeviceAuthResult.Offline -> ConnectionStatus.State.Offline
+                        else -> ConnectionStatus.State.Unauthorized
+                    }
                     ConnectionStatus.bind(
                         binding.connectionDot,
                         binding.connectionStatus,
-                        false,
+                        state,
                         this@EnrollActivity,
                     )
-                    throw IllegalStateException(getString(R.string.enroll_offline_block))
+                    val msg = when (auth) {
+                        is DeviceAuthResult.Failed -> auth.message
+                        else -> getString(R.string.enroll_offline_block)
+                    }
+                    throw IllegalStateException(msg)
                 }
 
                 val template = withContext(Dispatchers.Default) {

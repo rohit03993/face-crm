@@ -56,9 +56,13 @@ class StudentsActivity : AppCompatActivity() {
         super.onResume()
         refresh()
         statusJob?.cancel()
-        statusJob = ConnectionStatus.startPolling(this) { online ->
-            apiOnline = online
-            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
+        statusJob = ConnectionStatus.startPolling(this) { state ->
+            apiOnline = when (state) {
+                ConnectionStatus.State.Checking -> null
+                ConnectionStatus.State.Connected -> true
+                else -> false
+            }
+            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, state, this)
         }
     }
 

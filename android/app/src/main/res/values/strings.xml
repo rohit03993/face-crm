@@ -96,7 +96,7 @@
     <string name="enroll_title">Student enrollment</string>
     <string name="enroll_subtitle">Auto-capture: front, left, right, then chin up</string>
     <string name="settings_title">Kiosk settings</string>
-    <string name="settings_subtitle">Face URL (e.g. face.taskbook.co.in) · Device number · Device token — same APK for every school</string>
+    <string name="settings_subtitle">Face URL (e.g. https://face.folksindia.org) · Device number · Device token — same APK for every school</string>
     <string name="back">Back</string>
     <string name="open_rfid_mode">Open RFID verify screen</string>
 </resources>

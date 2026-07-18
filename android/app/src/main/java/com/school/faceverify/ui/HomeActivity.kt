@@ -21,6 +21,7 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHomeBinding
     private var statusJob: Job? = null
     private var modelReady = false
+    private var modelJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +46,10 @@ class HomeActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshSummary()
+        // Retry download after user fixes Face URL in Settings.
+        if (!modelReady && !ModelStore.isReady(this)) {
+            prepareFaceModel()
+        }
         statusJob?.cancel()
         statusJob = ConnectionStatus.startPolling(this) { online ->
             ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, online, this)
@@ -71,15 +76,19 @@ class HomeActivity : AppCompatActivity() {
         if (ModelStore.isReady(this)) {
             modelReady = true
             binding.modelDownloadPanel.visibility = View.GONE
+            binding.cardAttendance.isEnabled = true
+            binding.cardStudents.isEnabled = true
             return
         }
+        if (modelJob?.isActive == true) return
+
         binding.modelDownloadPanel.visibility = View.VISIBLE
         binding.modelDownloadStatus.text = getString(R.string.model_download_preparing)
         binding.modelDownloadProgress.progress = 0
         binding.cardAttendance.isEnabled = false
         binding.cardStudents.isEnabled = false
 
-        lifecycleScope.launch {
+        modelJob = lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 withContext(Dispatchers.IO) {

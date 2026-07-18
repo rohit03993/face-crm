@@ -21,8 +21,8 @@ data class KioskConfig(
     val cameraAttendanceMode: Boolean = false,
 ) {
     companion object {
-        // Shared Face Platform for all schools. Per-school pairing = device number + token.
-        const val DEFAULT_API_URL = "https://face.taskbook.co.in"
+        // Live Face host until face.taskbook.co.in DNS is ready. Override per school in Settings.
+        const val DEFAULT_API_URL = "https://face.folksindia.org"
         const val DEFAULT_DEVICE_ID = ""
         const val DEFAULT_DEVICE_TOKEN = ""
         const val DEFAULT_THRESHOLD = 0.30f

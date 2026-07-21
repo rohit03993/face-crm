@@ -88,14 +88,32 @@ class ArcFaceEmbedder(context: Context) : AutoCloseable {
 
         fun averageEmbeddings(embeddings: List<FloatArray>): FloatArray {
             require(embeddings.isNotEmpty())
+            return weightedAverageEmbeddings(embeddings, List(embeddings.size) { 1f })
+        }
+
+        /**
+         * Weighted mean then L2-normalize. Use higher weight for frontal shots so
+         * side/up poses do not dilute the template used at punch time.
+         */
+        fun weightedAverageEmbeddings(
+            embeddings: List<FloatArray>,
+            weights: List<Float>,
+        ): FloatArray {
+            require(embeddings.isNotEmpty())
+            require(embeddings.size == weights.size)
             val dim = embeddings[0].size
             val mean = FloatArray(dim)
-            for (emb in embeddings) {
+            var weightSum = 0f
+            for (i in embeddings.indices) {
+                val emb = embeddings[i]
                 require(emb.size == dim)
-                for (i in 0 until dim) mean[i] += emb[i]
+                val w = weights[i].coerceAtLeast(0f)
+                if (w <= 0f) continue
+                weightSum += w
+                for (d in 0 until dim) mean[d] += emb[d] * w
             }
-            val n = embeddings.size.toFloat()
-            for (i in 0 until dim) mean[i] /= n
+            require(weightSum > 0f)
+            for (d in 0 until dim) mean[d] /= weightSum
             return l2Normalize(mean)
         }
 

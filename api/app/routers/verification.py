@@ -166,6 +166,11 @@ async def camera_identify(
         .all()
     )
     if not enrolled:
+        logger.warning(
+            "camera-identify: no templates for tenant=%s device=%s",
+            device.tenant_id,
+            device.id,
+        )
         return CameraIdentifyOut(
             matched=False,
             threshold=settings.match_threshold,
@@ -187,6 +192,13 @@ async def camera_identify(
             best_student = student
 
     if best_student is None or best_score < settings.match_threshold:
+        logger.info(
+            "camera-identify miss: best_score=%.4f threshold=%.4f templates=%d tenant=%s",
+            best_score,
+            settings.match_threshold,
+            len(enrolled),
+            device.tenant_id,
+        )
         return CameraIdentifyOut(
             matched=False,
             score=max(best_score, 0.0),

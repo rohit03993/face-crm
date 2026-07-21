@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     face_model_name: str = "buffalo_l"
     face_model_version: str = "w600k_r50"
     embedding_dim: int = 512
-    match_threshold: float = 0.40
+    match_threshold: float = 0.35
     # Same face enrolled under two students — block if similarity >= this.
     duplicate_face_threshold: float = 0.45
     verification_timeout_seconds: int = 30

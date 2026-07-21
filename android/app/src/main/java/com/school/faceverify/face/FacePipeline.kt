@@ -23,28 +23,20 @@ data class FaceEmbedSample(
     val aligned: Bitmap,
 )
 
-/** Guided enrollment poses: front → left → right → chin up. */
+/** Guided enrollment: one clear frontal live capture (matches punch pose). */
 enum class EnrollPose(
     val id: String,
     val hintRes: Int,
 ) {
     FRONT("front", com.school.faceverify.R.string.enroll_pose_front),
-    LEFT("left", com.school.faceverify.R.string.enroll_pose_left),
-    RIGHT("right", com.school.faceverify.R.string.enroll_pose_right),
-    UP("up", com.school.faceverify.R.string.enroll_pose_up),
     ;
 
     fun matches(yaw: Float, pitch: Float): Boolean = when (this) {
         FRONT -> abs(yaw) <= 12f && abs(pitch) <= 12f
-        // Front camera frame is mirrored: user turns left → positive yaw in the bitmap
-        LEFT -> yaw >= 18f && abs(pitch) <= 18f
-        RIGHT -> yaw <= -18f && abs(pitch) <= 18f
-        // ML Kit: positive pitch = looking upward
-        UP -> pitch >= 12f && abs(yaw) <= 20f
     }
 
     companion object {
-        val SEQUENCE = listOf(FRONT, LEFT, RIGHT, UP)
+        val SEQUENCE = listOf(FRONT)
     }
 }
 

@@ -6,6 +6,11 @@
 2. Home → **Ready for punch** (screen stays awake)
 3. Person stands in oval, looks at camera, holds still ~1s → identify → CRM `/api/face-verify/camera-punch`
 
+## Enrollment
+
+- Add student: enter **roll + name first**, then **one frontal live capture** (eyes open, look straight, hold still)
+- `POST /students/enroll-template` with `image_count=1`
+
 ## Face API
 
 - `GET /students` — list with `enrolled` + `image_count`

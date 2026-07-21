@@ -4,11 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Matrix
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
@@ -18,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
@@ -29,6 +23,7 @@ import com.school.faceverify.data.KioskConfig
 import com.school.faceverify.databinding.ActivityMainBinding
 import com.school.faceverify.face.ArcFaceEmbedder
 import com.school.faceverify.face.FacePipeline
+import com.school.faceverify.face.FrameConverter
 import com.school.faceverify.net.FaceApiClient
 import com.school.faceverify.net.JsonLite
 import com.school.faceverify.net.KioskWebSocket
@@ -47,7 +42,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
@@ -461,10 +455,11 @@ class MainActivity : AppCompatActivity() {
             }
             val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
             analysis.setAnalyzer(cameraExecutor) { image ->
                 try {
-                    val bmp = imageProxyToBitmap(image)
+                    val bmp = FrameConverter.toBitmap(image, mirrorFrontCamera = true)
                     if (bmp != null) pendingFrame.set(bmp)
                 } finally {
                     image.close()
@@ -473,38 +468,6 @@ class MainActivity : AppCompatActivity() {
             provider.unbindAll()
             provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
         }, ContextCompat.getMainExecutor(this))
-    }
-
-    private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
-        return try {
-            val yBuffer = image.planes[0].buffer
-            val uBuffer = image.planes[1].buffer
-            val vBuffer = image.planes[2].buffer
-            val ySize = yBuffer.remaining()
-            val uSize = uBuffer.remaining()
-            val vSize = vBuffer.remaining()
-            val nv21 = ByteArray(ySize + uSize + vSize)
-            yBuffer.get(nv21, 0, ySize)
-            vBuffer.get(nv21, ySize, vSize)
-            uBuffer.get(nv21, ySize + vSize, uSize)
-            val yuv = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-            val out = ByteArrayOutputStream()
-            yuv.compressToJpeg(Rect(0, 0, image.width, image.height), 90, out)
-            var bmp = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()) ?: return null
-            val rotation = image.imageInfo.rotationDegrees
-            if (rotation != 0) {
-                val m = Matrix()
-                m.postRotate(rotation.toFloat())
-                bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
-            }
-            // Mirror front camera for natural selfie orientation
-            val mirror = Matrix()
-            mirror.preScale(-1f, 1f)
-            Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, mirror, true)
-        } catch (e: Exception) {
-            Log.w(TAG, "frame convert failed", e)
-            null
-        }
     }
 
     override fun onDestroy() {

@@ -24,13 +24,13 @@ enum class PresenceIssue {
 
 /** Requires intentional face presence before attendance identify runs. */
 object PresenceGate {
-    const val HOLD_MS = 1000L
-    private const val MAX_YAW = 15f
-    private const val MAX_PITCH = 15f
-    private const val MIN_EYE_OPEN = 0.45f
-    private const val MIN_FACE_WIDTH_RATIO = 0.20f
-    private const val MAX_CENTER_OFFSET_RATIO = 0.24f
-    private const val MIN_OVAL_FACE_RATIO = 0.32f
+    const val HOLD_MS = 800L
+    private const val MAX_YAW = 18f
+    private const val MAX_PITCH = 18f
+    private const val MIN_EYE_OPEN = 0.35f
+    private const val MIN_FACE_WIDTH_RATIO = 0.16f
+    private const val MAX_CENTER_OFFSET_RATIO = 0.28f
+    private const val MIN_OVAL_FACE_RATIO = 0.26f
 
     fun check(
         reading: PresenceReading?,

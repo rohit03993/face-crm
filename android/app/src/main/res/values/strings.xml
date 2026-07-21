@@ -56,13 +56,15 @@
     <string name="enroll_capture_hint_2">Turn slightly right</string>
     <string name="enroll_capture_hint_3">Optional: tilt chin up a little</string>
     <string name="enroll_capture_hint_ready">Looking good — tap Save student</string>
-    <string name="enroll_pose_front">Look straight · hold still — auto capturing</string>
+    <string name="enroll_pose_front">Look straight at the camera · hold still</string>
     <string name="enroll_pose_left">Slowly turn your head left — auto capturing</string>
     <string name="enroll_pose_right">Slowly turn your head right — auto capturing</string>
     <string name="enroll_pose_up">Tilt your chin up a little — auto capturing</string>
-    <string name="enroll_pose_hold">Hold still…</string>
-    <string name="enroll_pose_ready">All poses captured · tap Save student</string>
-    <string name="enroll_pose_progress">Pose %1$d of %2$d · %3$s</string>
+    <string name="enroll_pose_hold">Hold still… capturing</string>
+    <string name="enroll_pose_ready">Face captured · tap Save student</string>
+    <string name="enroll_pose_progress">Capturing face · look straight</string>
+    <string name="enroll_one_photo_hint">One clear frontal photo is enough. Look at the camera and hold still.</string>
+    <string name="enroll_eyes_closed">Keep both eyes open</string>
     <string name="capture_manual">Capture now</string>
     <string name="waiting">Ready for card tap</string>
     <string name="waiting_hint">Stand in the frame · look at the camera</string>
@@ -110,6 +112,8 @@
     <string name="attendance_recorded">Attendance recorded</string>
     <string name="face_not_registered">This face not registered</string>
     <string name="face_not_registered_hint">Enroll this student first from Students</string>
+    <string name="face_not_registered_score">Best score %.2f · need %.2f · re-enroll if score is close</string>
+    <string name="already_marked">Already marked</string>
     <string name="enroll_details_title">Student details</string>
     <string name="enroll_details_hint">Enter roll number and name first, then capture the face.</string>
     <string name="enroll_continue_face">Continue to face capture</string>
@@ -122,7 +126,7 @@
     <string name="ws_connected">Connected</string>
     <string name="ws_disconnected">Offline</string>
     <string name="enroll_title">Student enrollment</string>
-    <string name="enroll_subtitle">Auto-capture: front, left, right, then chin up</string>
+    <string name="enroll_subtitle">One clear frontal photo · look at the camera</string>
     <string name="settings_title">Kiosk settings</string>
     <string name="settings_subtitle">Enter Face Platform URL, device number, and token from Face admin. Nothing is pre-filled.</string>
     <string name="face_url_required">Set Face Platform URL in Settings first</string>

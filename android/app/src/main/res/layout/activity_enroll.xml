@@ -271,7 +271,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="8dp"
                 android:layout_marginTop="8dp"
-                android:max="4"
+                android:max="1"
                 android:progress="0"
                 android:progressDrawable="@drawable/bg_progress" />
 

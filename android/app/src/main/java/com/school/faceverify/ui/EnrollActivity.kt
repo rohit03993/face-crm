@@ -55,6 +55,7 @@ class EnrollActivity : AppCompatActivity() {
     private var embedder: ArcFaceEmbedder? = null
     private var pipeline: FacePipeline? = null
     private var editMode = false
+    private var faceOnly = false
     private var existingStudentId: String? = null
     private var poseHoldStartedAt = 0L
     private var faceStepStarted = false
@@ -78,19 +79,31 @@ class EnrollActivity : AppCompatActivity() {
         SystemBars.apply(this, binding.root)
 
         editMode = intent.getBooleanExtra(EXTRA_EDIT_MODE, false)
+        faceOnly = intent.getBooleanExtra(EXTRA_FACE_ONLY, false)
         existingStudentId = intent.getStringExtra(EXTRA_STUDENT_ID)
         val enrollment = intent.getStringExtra(EXTRA_ENROLLMENT)
         val name = intent.getStringExtra(EXTRA_NAME)
         if (!enrollment.isNullOrBlank()) binding.inputStudentId.setText(enrollment)
         if (!name.isNullOrBlank()) binding.inputStudentName.setText(name)
-        if (editMode) {
-            binding.enrollTitle.text = getString(R.string.update_face)
-            binding.captureTitle.text = getString(R.string.update_face)
-            binding.btnUpload.text = getString(R.string.update_face)
+        if (editMode || faceOnly) {
+            binding.enrollTitle.text = getString(
+                if (editMode) R.string.update_face else R.string.add_face,
+            )
+            binding.captureTitle.text = binding.enrollTitle.text
+            binding.btnUpload.text = binding.enrollTitle.text
             binding.inputStudentId.isEnabled = false
+            binding.inputStudentName.isEnabled = false
         }
 
-        showDetailsStep()
+        if (faceOnly &&
+            !existingStudentId.isNullOrBlank() &&
+            !enrollment.isNullOrBlank() &&
+            !name.isNullOrBlank()
+        ) {
+            continueToFaceCapture()
+        } else {
+            showDetailsStep()
+        }
         binding.btnCapture.text = getString(R.string.capture_manual)
         binding.btnCapture.isEnabled = false
 
@@ -180,10 +193,23 @@ class EnrollActivity : AppCompatActivity() {
     }
 
     private fun goBackFromCapture() {
+        if (faceOnly) {
+            if (embeddings.isNotEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.back)
+                    .setMessage(R.string.enroll_discard_face_only)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> finish() }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            } else {
+                finish()
+            }
+            return
+        }
         if (embeddings.isNotEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle(R.string.back)
-                .setMessage("Discard captured faces and edit student details?")
+                .setMessage(R.string.enroll_discard_details)
                 .setPositiveButton(android.R.string.ok) { _, _ ->
                     embeddings.clear()
                     showDetailsStep()
@@ -217,7 +243,7 @@ class EnrollActivity : AppCompatActivity() {
             } catch (t: Throwable) {
                 Log.e("EnrollActivity", "model load failed", t)
                 Toast.makeText(this@EnrollActivity, R.string.model_failed, Toast.LENGTH_LONG).show()
-                showDetailsStep()
+                if (faceOnly) finish() else showDetailsStep()
             } finally {
                 modelLoading = false
             }
@@ -580,6 +606,7 @@ class EnrollActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_EDIT_MODE = "edit_mode"
+        const val EXTRA_FACE_ONLY = "face_only"
         const val EXTRA_STUDENT_ID = "student_id"
         const val EXTRA_ENROLLMENT = "enrollment"
         const val EXTRA_NAME = "name"

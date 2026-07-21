@@ -1,15 +1,21 @@
 package com.school.faceverify.ui
 
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.TextInputEditText
 import com.school.faceverify.FaceVerifyApp
@@ -20,6 +26,7 @@ import com.school.faceverify.net.FaceApiClient
 import com.school.faceverify.net.StudentListItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,11 +34,16 @@ import kotlinx.coroutines.withContext
 class StudentsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityStudentsBinding
     private val adapter = StudentAdapter(
-        onEdit = { showEditOptions(it) },
-        onDelete = { confirmDelete(it) },
+        onAddFace = { openAddFace(it) },
+        onMore = { showMoreOptions(it) },
     )
     private var statusJob: Job? = null
+    private var searchJob: Job? = null
     private var apiOnline: Boolean? = null
+    private var allStudents = emptyList<StudentListItem>()
+    private var currentFilter = FaceFilter.ALL
+
+    private enum class FaceFilter { ALL, MISSING, READY }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,15 +53,28 @@ class StudentsActivity : AppCompatActivity() {
 
         binding.studentsList.layoutManager = LinearLayoutManager(this)
         binding.studentsList.adapter = adapter
+        binding.studentsList.setHasFixedSize(true)
+        binding.studentsList.itemAnimator = null
+
         binding.btnBack.setOnClickListener { finish() }
         binding.btnRetry.setOnClickListener { refresh() }
-        binding.btnAddStudent.setOnClickListener {
-            if (apiOnline == false) {
-                Toast.makeText(this, R.string.enroll_offline_block, Toast.LENGTH_LONG).show()
-                return@setOnClickListener
+        binding.btnShowMissing.setOnClickListener { showMissingOnly() }
+
+        binding.searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                searchJob?.cancel()
+                searchJob = lifecycleScope.launch {
+                    delay(200)
+                    applyFilterAndSubmit()
+                }
             }
-            startActivity(Intent(this, EnrollActivity::class.java))
-        }
+        })
+
+        binding.chipAll.setOnClickListener { setFilter(FaceFilter.ALL) }
+        binding.chipMissing.setOnClickListener { setFilter(FaceFilter.MISSING) }
+        binding.chipReady.setOnClickListener { setFilter(FaceFilter.READY) }
     }
 
     override fun onResume() {
@@ -72,6 +97,22 @@ class StudentsActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    private fun setFilter(filter: FaceFilter) {
+        currentFilter = filter
+        when (filter) {
+            FaceFilter.ALL -> binding.chipAll.isChecked = true
+            FaceFilter.MISSING -> binding.chipMissing.isChecked = true
+            FaceFilter.READY -> binding.chipReady.isChecked = true
+        }
+        applyFilterAndSubmit()
+    }
+
+    private fun showMissingOnly() {
+        binding.searchInput.text?.clear()
+        setFilter(FaceFilter.MISSING)
+        binding.studentsList.scrollToPosition(0)
+    }
+
     private fun requireOnline(): Boolean {
         if (apiOnline == false) {
             Toast.makeText(this, R.string.enroll_offline_block, Toast.LENGTH_LONG).show()
@@ -80,19 +121,34 @@ class StudentsActivity : AppCompatActivity() {
         return true
     }
 
-    private fun showEditOptions(item: StudentListItem) {
+    private fun openAddFace(item: StudentListItem) {
+        if (!requireOnline()) return
+        startActivity(
+            Intent(this, EnrollActivity::class.java).apply {
+                putExtra(EnrollActivity.EXTRA_STUDENT_ID, item.id)
+                putExtra(EnrollActivity.EXTRA_ENROLLMENT, item.enrollmentNumber)
+                putExtra(EnrollActivity.EXTRA_NAME, item.name)
+                putExtra(EnrollActivity.EXTRA_FACE_ONLY, true)
+                putExtra(EnrollActivity.EXTRA_EDIT_MODE, item.enrolled)
+            },
+        )
+    }
+
+    private fun showMoreOptions(item: StudentListItem) {
         if (!requireOnline()) return
         AlertDialog.Builder(this)
             .setTitle(item.name)
             .setItems(
                 arrayOf(
                     getString(R.string.edit_details),
-                    getString(R.string.update_face),
+                    if (item.enrolled) getString(R.string.update_face) else getString(R.string.add_face),
+                    getString(R.string.delete_student),
                 ),
             ) { _, which ->
                 when (which) {
                     0 -> showEditDetailsDialog(item)
-                    1 -> openUpdateFace(item)
+                    1 -> openAddFace(item)
+                    2 -> confirmDelete(item)
                 }
             }
             .setNegativeButton(R.string.back, null)
@@ -120,17 +176,6 @@ class StudentsActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.back, null)
             .show()
-    }
-
-    private fun openUpdateFace(item: StudentListItem) {
-        startActivity(
-            Intent(this, EnrollActivity::class.java).apply {
-                putExtra(EnrollActivity.EXTRA_EDIT_MODE, true)
-                putExtra(EnrollActivity.EXTRA_STUDENT_ID, item.id)
-                putExtra(EnrollActivity.EXTRA_ENROLLMENT, item.enrollmentNumber)
-                putExtra(EnrollActivity.EXTRA_NAME, item.name)
-            },
-        )
     }
 
     private fun saveDetails(studentId: String, name: String, enrollment: String) {
@@ -205,16 +250,17 @@ class StudentsActivity : AppCompatActivity() {
                 val students = withContext(Dispatchers.IO) {
                     FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).listStudents()
                 }
-                adapter.submit(students)
-                val enrolled = students.count { it.enrolled }
-                binding.listSummary.text = getString(R.string.students_summary, enrolled, students.size)
-                binding.emptyState.visibility = if (students.isEmpty()) View.VISIBLE else View.GONE
-                binding.studentsList.visibility = if (students.isEmpty()) View.GONE else View.VISIBLE
+                allStudents = students.sortedWith(
+                    compareBy<StudentListItem> { it.enrolled }.thenBy { it.name.lowercase() },
+                )
+                updateSummary()
+                applyFilterAndSubmit()
             } catch (e: Exception) {
                 binding.listSummary.text = getString(R.string.students_offline_hint)
                 binding.emptyState.visibility = View.GONE
                 binding.studentsList.visibility = View.GONE
                 binding.btnRetry.visibility = View.VISIBLE
+                binding.listFilteredCount.visibility = View.GONE
                 Toast.makeText(this@StudentsActivity, e.message, Toast.LENGTH_LONG).show()
             } finally {
                 binding.listLoading.visibility = View.GONE
@@ -222,51 +268,106 @@ class StudentsActivity : AppCompatActivity() {
         }
     }
 
-    private class StudentAdapter(
-        private val onEdit: (StudentListItem) -> Unit,
-        private val onDelete: (StudentListItem) -> Unit,
-    ) : RecyclerView.Adapter<StudentAdapter.Holder>() {
-        private val items = mutableListOf<StudentListItem>()
-
-        fun submit(next: List<StudentListItem>) {
-            items.clear()
-            items.addAll(next)
-            notifyDataSetChanged()
+    private fun updateSummary() {
+        val ready = allStudents.count { it.enrolled }
+        val missing = allStudents.size - ready
+        binding.listSummary.text = getString(
+            R.string.students_summary_full,
+            ready,
+            missing,
+            allStudents.size,
+        )
+        binding.btnShowMissing.text = if (missing > 0) {
+            getString(R.string.students_show_missing_count, missing)
+        } else {
+            getString(R.string.students_show_missing)
         }
+        binding.btnShowMissing.visibility = if (missing > 0) View.VISIBLE else View.GONE
+    }
 
+    private fun applyFilterAndSubmit() {
+        val query = binding.searchInput.text?.toString()?.trim().orEmpty().lowercase()
+        val filtered = allStudents.filter { item ->
+            val matchesFilter = when (currentFilter) {
+                FaceFilter.ALL -> true
+                FaceFilter.MISSING -> !item.enrolled
+                FaceFilter.READY -> item.enrolled
+            }
+            val matchesQuery = query.isEmpty() ||
+                item.name.lowercase().contains(query) ||
+                item.enrollmentNumber.lowercase().contains(query)
+            matchesFilter && matchesQuery
+        }
+        adapter.submitList(filtered)
+        binding.emptyState.text = when {
+            allStudents.isEmpty() -> getString(R.string.students_empty)
+            query.isNotEmpty() -> getString(R.string.students_no_search_results, query)
+            currentFilter == FaceFilter.MISSING -> getString(R.string.students_no_missing)
+            currentFilter == FaceFilter.READY -> getString(R.string.students_no_ready)
+            else -> getString(R.string.students_empty)
+        }
+        binding.emptyState.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+        binding.studentsList.visibility = if (filtered.isEmpty()) View.GONE else View.VISIBLE
+        binding.listFilteredCount.visibility =
+            if (filtered.size != allStudents.size) View.VISIBLE else View.GONE
+        binding.listFilteredCount.text = getString(R.string.students_filtered_count, filtered.size)
+    }
+
+    private class StudentAdapter(
+        private val onAddFace: (StudentListItem) -> Unit,
+        private val onMore: (StudentListItem) -> Unit,
+    ) : ListAdapter<StudentListItem, StudentAdapter.Holder>(DIFF) {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val binding = ItemStudentBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            return Holder(binding, onEdit, onDelete)
+            return Holder(binding, onAddFace, onMore)
         }
 
-        override fun getItemCount(): Int = items.size
-
         override fun onBindViewHolder(holder: Holder, position: Int) {
-            holder.bind(items[position])
+            holder.bind(getItem(position))
         }
 
         class Holder(
             private val binding: ItemStudentBinding,
-            private val onEdit: (StudentListItem) -> Unit,
-            private val onDelete: (StudentListItem) -> Unit,
+            private val onAddFace: (StudentListItem) -> Unit,
+            private val onMore: (StudentListItem) -> Unit,
         ) : RecyclerView.ViewHolder(binding.root) {
             fun bind(item: StudentListItem) {
+                val ctx = binding.root.context
                 binding.studentName.text = item.name
                 binding.studentRoll.text = item.enrollmentNumber
-                val batch = item.batch?.takeIf { it.isNotBlank() }
-                binding.studentMeta.text = when {
-                    batch != null && item.enrolled -> "$batch · ${item.imageCount} angles"
-                    batch != null -> batch
-                    item.enrolled -> "${item.imageCount} face angles"
-                    else -> "Face not enrolled yet"
-                }
-                binding.studentStatus.text = if (item.enrolled) {
-                    binding.root.context.getString(R.string.status_ready)
+                binding.studentMeta.text = item.batch?.takeIf { it.isNotBlank() }
+                    ?: ctx.getString(R.string.students_synced_from_crm)
+
+                if (item.enrolled) {
+                    binding.studentStatus.text = ctx.getString(R.string.status_ready)
+                    binding.studentStatus.setBackgroundResource(R.drawable.bg_status_ready)
+                    binding.studentStatus.setTextColor(ContextCompat.getColor(ctx, R.color.teal_bright))
+                    binding.btnFaceAction.text = ctx.getString(R.string.update_face)
+                    binding.faceIndicator.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(ContextCompat.getColor(ctx, R.color.pass))
+                    }
                 } else {
-                    binding.root.context.getString(R.string.status_pending)
+                    binding.studentStatus.text = ctx.getString(R.string.status_missing_face)
+                    binding.studentStatus.setBackgroundResource(R.drawable.bg_status_missing)
+                    binding.studentStatus.setTextColor(ContextCompat.getColor(ctx, R.color.amber))
+                    binding.btnFaceAction.text = ctx.getString(R.string.add_face)
+                    binding.faceIndicator.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(ContextCompat.getColor(ctx, R.color.amber))
+                    }
                 }
-                binding.btnEdit.setOnClickListener { onEdit(item) }
-                binding.btnDelete.setOnClickListener { onDelete(item) }
+
+                binding.btnFaceAction.setOnClickListener { onAddFace(item) }
+                binding.btnMore.setOnClickListener { onMore(item) }
+                binding.root.setOnClickListener { onAddFace(item) }
+            }
+        }
+
+        companion object {
+            private val DIFF = object : DiffUtil.ItemCallback<StudentListItem>() {
+                override fun areItemsTheSame(a: StudentListItem, b: StudentListItem) = a.id == b.id
+                override fun areContentsTheSame(a: StudentListItem, b: StudentListItem) = a == b
             }
         }
     }

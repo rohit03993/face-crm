@@ -132,10 +132,12 @@ class HomeActivity : AppCompatActivity() {
                 val students = withContext(Dispatchers.IO) {
                     FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).listStudents()
                 }
-                val enrolled = students.count { it.enrolled }
+                val ready = students.count { it.enrolled }
+                val missing = students.size - ready
                 binding.studentsSummary.text = getString(
                     R.string.students_summary,
-                    enrolled,
+                    ready,
+                    missing,
                     students.size,
                 )
             } catch (_: Exception) {

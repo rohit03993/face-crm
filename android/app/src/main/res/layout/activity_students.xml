@@ -65,6 +65,82 @@
             </LinearLayout>
         </LinearLayout>
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="6dp"
+            android:text="@string/students_crm_hint"
+            android:textColor="@color/mist_dim"
+            android:textSize="13sp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="10dp"
+            android:hint="@string/students_search_hint"
+            app:boxBackgroundColor="@color/field_bg"
+            app:boxStrokeColor="@color/teal"
+            app:endIconMode="clear_text"
+            app:hintTextColor="@color/mist_dim"
+            app:startIconDrawable="@android:drawable/ic_menu_search"
+            app:startIconTint="@color/mist_dim">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/searchInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:textColor="@color/mist"
+                android:textSize="16sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:paddingHorizontal="16dp"
+            android:scrollbars="none">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filterChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAll"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/students_filter_all"
+                    android:textColor="@color/mist"
+                    app:chipBackgroundColor="@color/slate" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipMissing"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/students_filter_missing"
+                    android:textColor="@color/mist"
+                    app:chipBackgroundColor="@color/slate" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipReady"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/students_filter_ready"
+                    android:textColor="@color/mist"
+                    app:chipBackgroundColor="@color/slate" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -80,6 +156,14 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/students_loading" />
+
+            <TextView
+                android:id="@+id/listFilteredCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/mist_dim"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <ProgressBar
                 android:id="@+id/listLoading"
@@ -102,7 +186,7 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:layout_weight="1">
 
             <androidx.recyclerview.widget.RecyclerView
@@ -110,8 +194,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="96dp" />
+                android:paddingHorizontal="12dp"
+                android:paddingBottom="88dp"
+                android:scrollbars="vertical" />
 
             <TextView
                 android:id="@+id/emptyState"
@@ -127,13 +212,13 @@
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-        android:id="@+id/btnAddStudent"
+        android:id="@+id/btnShowMissing"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="24dp"
-        android:text="@string/add_student"
+        android:layout_margin="20dp"
+        android:text="@string/students_show_missing"
         android:textColor="@color/white"
-        app:backgroundTint="@color/teal"
+        app:backgroundTint="@color/amber"
         app:iconTint="@color/white" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

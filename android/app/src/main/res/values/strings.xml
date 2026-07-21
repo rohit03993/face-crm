@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Face Verify</string>
-    <string name="brand">Face Verify</string>
+    <string name="app_name">Task Book</string>
+    <string name="brand">Task Book</string>
     <string name="brand_tagline">Attendance gate</string>
     <string name="home_subtitle">Add students, then start attendance. Face model downloads once (~166 MB).</string>
     <string name="ready_for_punch">Ready for punch</string>

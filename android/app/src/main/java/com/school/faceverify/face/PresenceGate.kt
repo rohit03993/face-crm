@@ -45,8 +45,8 @@ object PresenceGate {
         val faceWRatio = faceW / bitmapW
         if (faceWRatio < MIN_FACE_WIDTH_RATIO) return PresenceIssue.TOO_SMALL
 
-        val cx = bounds.centerX()
-        val cy = bounds.centerY()
+        val cx = bounds.centerX().toFloat()
+        val cy = bounds.centerY().toFloat()
         if (ovalInBitmap != null) {
             if (!ovalInBitmap.contains(cx, cy)) return PresenceIssue.OFF_CENTER
             if (faceW < ovalInBitmap.width() * MIN_OVAL_FACE_RATIO) return PresenceIssue.TOO_SMALL

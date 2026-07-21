@@ -49,16 +49,34 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintWidth_percent="0.62" />
 
-    <TextView
-        android:id="@+id/brandTitle"
-        style="@style/Text.FaceVerify.Brand"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/brandRow"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="20dp"
         android:layout_marginTop="18dp"
-        android:text="@string/brand"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toStartOf="@id/connectionPill"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:contentDescription="@string/brand"
+            android:src="@drawable/ic_taskbook_logo" />
+
+        <TextView
+            android:id="@+id/brandTitle"
+            style="@style/Text.FaceVerify.Brand"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="@string/brand"
+            android:textAllCaps="false"
+            android:textSize="18sp" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/connectionPill"
@@ -103,7 +121,7 @@
         android:paddingVertical="18dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/brandTitle">
+        app:layout_constraintTop_toBottomOf="@id/brandRow">
 
         <!-- Keep statusBanner id for simpler migration; shows main status line -->
         <TextView

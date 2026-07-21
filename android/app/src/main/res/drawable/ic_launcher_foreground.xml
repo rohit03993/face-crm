@@ -4,7 +4,47 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Open book -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30c-10,0 -18,8 -18,18c0,10 8,18 18,18c10,0 18,-8 18,-18c0,-10 -8,-18 -18,-18zM30,82c0,-12 16,-18 24,-18s24,6 24,18v4H30v-4z" />
+        android:pathData="M54,30 L38,34 L38,72 C38,74 40,75 42,74 L54,70 L66,74 C68,75 70,74 70,72 L70,34 Z" />
+    <path
+        android:fillColor="#E8EEF5"
+        android:pathData="M54,30 L54,70 L66,74 C68,75 70,74 70,72 L70,34 Z" />
+    <path
+        android:fillColor="#0B1220"
+        android:pathData="M54,30 L54,70" />
+    <!-- Page lines -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M44,42 L52,40"
+        android:strokeWidth="1.5"
+        android:strokeColor="#0B1220"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M44,48 L52,46"
+        android:strokeWidth="1.5"
+        android:strokeColor="#0B1220"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M56,40 L66,42"
+        android:strokeWidth="1.5"
+        android:strokeColor="#0B1220"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M56,46 L66,48"
+        android:strokeWidth="1.5"
+        android:strokeColor="#0B1220"
+        android:strokeLineCap="round" />
+    <!-- Check mark for attendance -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M48,58 L52,62 L62,52"
+        android:strokeWidth="3"
+        android:strokeColor="#0F8A7A"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

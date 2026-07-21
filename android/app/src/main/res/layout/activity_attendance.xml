@@ -21,7 +21,7 @@
     <View
         android:id="@+id/scrimTop"
         android:layout_width="0dp"
-        android:layout_height="220dp"
+        android:layout_height="240dp"
         android:background="@drawable/bg_scrim_top"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -30,18 +30,16 @@
     <View
         android:id="@+id/scrimBottom"
         android:layout_width="0dp"
-        android:layout_height="200dp"
+        android:layout_height="220dp"
         android:background="@drawable/bg_scrim_bottom"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <View
+    <com.school.faceverify.ui.FaceOvalOverlay
         android:id="@+id/faceGuide"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:alpha="0.85"
-        android:background="@drawable/bg_face_oval"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintDimensionRatio="3:4"
         app:layout_constraintEnd_toEndOf="parent"
@@ -113,7 +111,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="@string/camera_ready" />
+            android:text="@string/camera_ready"
+            android:textSize="28sp" />
 
         <TextView
             android:id="@+id/statusHint"
@@ -123,6 +122,52 @@
             android:layout_marginTop="6dp"
             android:gravity="center"
             android:text="@string/camera_ready_hint" />
+
+        <LinearLayout
+            android:id="@+id/stepRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/stepPosition"
+                style="@style/Text.FaceVerify.Step"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/step_position" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="8dp"
+                android:text="→"
+                android:textColor="@color/mist_dim"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/stepLook"
+                style="@style/Text.FaceVerify.Step"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/step_look" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="8dp"
+                android:text="→"
+                android:textColor="@color/mist_dim"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/stepHold"
+                style="@style/Text.FaceVerify.Step"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/step_hold" />
+        </LinearLayout>
     </LinearLayout>
 
     <com.google.android.material.button.MaterialButton

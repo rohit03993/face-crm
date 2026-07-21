@@ -53,6 +53,7 @@ class FacePipeline(private val embedder: ArcFaceEmbedder) {
         FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
             .setMinFaceSize(0.15f)
             .build(),
     )
@@ -62,6 +63,18 @@ class FacePipeline(private val embedder: ArcFaceEmbedder) {
         return FacePoseReading(
             yaw = face.headEulerAngleY,
             pitch = face.headEulerAngleX,
+            hasLandmarks = landmarksOrNull(face) != null,
+        )
+    }
+
+    suspend fun detectPresence(bitmap: Bitmap): PresenceReading? {
+        val face = largestFace(bitmap) ?: return null
+        return PresenceReading(
+            yaw = face.headEulerAngleY,
+            pitch = face.headEulerAngleX,
+            leftEyeOpen = face.leftEyeOpenProbability,
+            rightEyeOpen = face.rightEyeOpenProbability,
+            faceBounds = face.boundingBox,
             hasLandmarks = landmarksOrNull(face) != null,
         )
     }

@@ -4,7 +4,7 @@
 
 1. Home → **Students** → list + **Add student** (roll, name, 3–4 photos)
 2. Home → **Ready for punch** (screen stays awake)
-3. Person stands in oval → auto identify → CRM `/api/face-verify/camera-punch`
+3. Person stands in oval, looks at camera, holds still ~1s → identify → CRM `/api/face-verify/camera-punch`
 
 ## Face API
 

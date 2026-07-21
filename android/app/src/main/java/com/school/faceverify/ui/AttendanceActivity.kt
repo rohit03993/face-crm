@@ -205,7 +205,16 @@ class AttendanceActivity : AppCompatActivity() {
                         }
                         delay(800)
                     }
-                    else -> delay(200)
+                    else -> {
+                        withContext(Dispatchers.Main) {
+                            binding.statusBanner.text = getString(R.string.face_not_registered)
+                            binding.statusHint.text = getString(R.string.face_not_registered_hint)
+                            binding.faceGuide.ovalState = FaceOvalOverlay.OvalState.FAIL
+                            binding.faceGuide.applyAlpha()
+                            setTone(Tone.FAIL)
+                        }
+                        delay(1500)
+                    }
                 }
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t

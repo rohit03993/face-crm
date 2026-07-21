@@ -108,6 +108,14 @@
     <string name="step_look">Look</string>
     <string name="step_hold">Hold</string>
     <string name="attendance_recorded">Attendance recorded</string>
+    <string name="face_not_registered">This face not registered</string>
+    <string name="face_not_registered_hint">Enroll this student first from Students</string>
+    <string name="enroll_details_title">Student details</string>
+    <string name="enroll_details_hint">Enter roll number and name first, then capture the face.</string>
+    <string name="enroll_continue_face">Continue to face capture</string>
+    <string name="enroll_enter_roll">Enter roll / student ID</string>
+    <string name="enroll_enter_name">Enter student name</string>
+    <string name="enroll_capturing_for">Capturing face for %1$s · %2$s</string>
     <string name="capture">Capture</string>
     <string name="upload_enroll">Upload</string>
     <string name="student_id">Roll / student ID</string>

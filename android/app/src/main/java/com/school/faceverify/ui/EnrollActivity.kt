@@ -44,8 +44,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Enroll on the phone with guided auto-capture (front → left → right → up),
- * then upload only the small 512-d template to the API.
+ * Enroll flow: enter roll + name first, then guided face capture
+ * (front → left → right → up), then upload the averaged template.
  */
 class EnrollActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEnrollBinding
@@ -63,11 +63,18 @@ class EnrollActivity : AppCompatActivity() {
     private var editMode = false
     private var existingStudentId: String? = null
     private var poseHoldStartedAt = 0L
+    private var faceStepStarted = false
+    private var modelLoading = false
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) startCamera() else Toast.makeText(this, "Camera required", Toast.LENGTH_LONG).show()
+        if (granted) {
+            startCamera()
+            ensureModelAndCapture()
+        } else {
+            Toast.makeText(this, "Camera required", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,44 +91,20 @@ class EnrollActivity : AppCompatActivity() {
         if (!name.isNullOrBlank()) binding.inputStudentName.setText(name)
         if (editMode) {
             binding.enrollTitle.text = getString(R.string.update_face)
+            binding.captureTitle.text = getString(R.string.update_face)
             binding.btnUpload.text = getString(R.string.update_face)
             binding.inputStudentId.isEnabled = false
         }
 
+        showDetailsStep()
         binding.btnCapture.text = getString(R.string.capture_manual)
-        updateUi()
         binding.btnCapture.isEnabled = false
-        binding.hintText.text = getString(R.string.enroll_model_loading)
 
+        binding.btnContinueFace.setOnClickListener { continueToFaceCapture() }
+        binding.btnCancelDetails.setOnClickListener { finish() }
         binding.btnCapture.setOnClickListener { captureShot(manual = true) }
         binding.btnUpload.setOnClickListener { upload() }
-        binding.btnCancel.setOnClickListener { finish() }
-
-        lifecycleScope.launch {
-            try {
-                val loaded = withContext(Dispatchers.IO) {
-                    val emb = ArcFaceEmbedder(this@EnrollActivity)
-                    emb to FacePipeline(emb)
-                }
-                embedder = loaded.first
-                pipeline = loaded.second
-                updateUi()
-                startAutoCaptureLoop()
-                if (ContextCompat.checkSelfPermission(
-                        this@EnrollActivity,
-                        Manifest.permission.CAMERA,
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    startCamera()
-                } else {
-                    permissionLauncher.launch(Manifest.permission.CAMERA)
-                }
-            } catch (t: Throwable) {
-                Log.e("EnrollActivity", "model load failed", t)
-                Toast.makeText(this@EnrollActivity, R.string.model_failed, Toast.LENGTH_LONG).show()
-                finish()
-            }
-        }
+        binding.btnCancel.setOnClickListener { goBackFromCapture() }
     }
 
     override fun onResume() {
@@ -133,10 +116,10 @@ class EnrollActivity : AppCompatActivity() {
                 ConnectionStatus.State.Connected -> true
                 else -> false
             }
-            ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, state, this)
-            if (binding.savingOverlay.visibility != View.VISIBLE) updateUi()
+            bindConnection(state)
+            if (faceStepStarted && binding.savingOverlay.visibility != View.VISIBLE) updateUi()
         }
-        if (pipeline != null) startAutoCaptureLoop()
+        if (faceStepStarted && pipeline != null) startAutoCaptureLoop()
     }
 
     override fun onPause() {
@@ -147,13 +130,114 @@ class EnrollActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    private fun bindConnection(state: ConnectionStatus.State) {
+        ConnectionStatus.bind(binding.connectionDot, binding.connectionStatus, state, this)
+        ConnectionStatus.bind(
+            binding.connectionDotCapture,
+            binding.connectionStatusCapture,
+            state,
+            this,
+        )
+    }
+
+    private fun showDetailsStep() {
+        faceStepStarted = false
+        autoJob?.cancel()
+        autoJob = null
+        cameraProvider?.unbindAll()
+        pendingFrame.set(null)
+        binding.detailsStep.visibility = View.VISIBLE
+        binding.captureStep.visibility = View.GONE
+    }
+
+    private fun continueToFaceCapture() {
+        val studentId = binding.inputStudentId.text?.toString()?.trim().orEmpty()
+        val studentName = binding.inputStudentName.text?.toString()?.trim().orEmpty()
+        if (studentId.isBlank()) {
+            Toast.makeText(this, R.string.enroll_enter_roll, Toast.LENGTH_SHORT).show()
+            binding.inputStudentId.requestFocus()
+            return
+        }
+        if (studentName.isBlank()) {
+            Toast.makeText(this, R.string.enroll_enter_name, Toast.LENGTH_SHORT).show()
+            binding.inputStudentName.requestFocus()
+            return
+        }
+
+        faceStepStarted = true
+        binding.detailsStep.visibility = View.GONE
+        binding.captureStep.visibility = View.VISIBLE
+        binding.studentSummary.text = getString(
+            R.string.enroll_capturing_for,
+            studentId,
+            studentName,
+        )
+        binding.hintText.text = getString(R.string.enroll_model_loading)
+        updateUi()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            startCamera()
+            ensureModelAndCapture()
+        } else {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun goBackFromCapture() {
+        if (embeddings.isNotEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.back)
+                .setMessage("Discard captured faces and edit student details?")
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    embeddings.clear()
+                    showDetailsStep()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        } else {
+            showDetailsStep()
+        }
+    }
+
+    private fun ensureModelAndCapture() {
+        if (pipeline != null) {
+            updateUi()
+            startAutoCaptureLoop()
+            return
+        }
+        if (modelLoading) return
+        modelLoading = true
+        binding.hintText.text = getString(R.string.enroll_model_loading)
+        lifecycleScope.launch {
+            try {
+                val loaded = withContext(Dispatchers.IO) {
+                    val emb = ArcFaceEmbedder(this@EnrollActivity)
+                    emb to FacePipeline(emb)
+                }
+                embedder = loaded.first
+                pipeline = loaded.second
+                updateUi()
+                if (faceStepStarted) startAutoCaptureLoop()
+            } catch (t: Throwable) {
+                Log.e("EnrollActivity", "model load failed", t)
+                Toast.makeText(this@EnrollActivity, R.string.model_failed, Toast.LENGTH_LONG).show()
+                showDetailsStep()
+            } finally {
+                modelLoading = false
+            }
+        }
+    }
+
     private fun currentPose(): EnrollPose? =
         EnrollPose.SEQUENCE.getOrNull(embeddings.size)
 
     private fun startAutoCaptureLoop() {
+        if (!faceStepStarted) return
         if (autoJob?.isActive == true) return
         autoJob = lifecycleScope.launch {
-            while (isActive) {
+            while (isActive && faceStepStarted) {
                 if (capturingPaused.get() ||
                     captureBusy.get() ||
                     pipeline == null ||
@@ -210,6 +294,7 @@ class EnrollActivity : AppCompatActivity() {
     }
 
     private fun captureShot(manual: Boolean) {
+        if (!faceStepStarted) return
         if (pipeline == null) {
             Toast.makeText(this, R.string.enroll_model_loading, Toast.LENGTH_SHORT).show()
             return
@@ -287,6 +372,7 @@ class EnrollActivity : AppCompatActivity() {
     }
 
     private fun updateUi() {
+        if (!faceStepStarted) return
         val n = embeddings.size
         val modelReady = pipeline != null
         val total = EnrollPose.SEQUENCE.size
@@ -322,21 +408,25 @@ class EnrollActivity : AppCompatActivity() {
 
     private fun setSaving(visible: Boolean, step: String? = null) {
         binding.savingOverlay.visibility = if (visible) View.VISIBLE else View.GONE
-        if (step != null) binding.savingStep.text = step
         capturingPaused.set(visible)
         if (visible) {
             autoJob?.cancel()
             autoJob = null
-        } else {
+        } else if (faceStepStarted) {
             startAutoCaptureLoop()
         }
+        if (step != null) binding.savingStep.text = step
     }
 
     private fun upload() {
         val studentId = binding.inputStudentId.text?.toString()?.trim().orEmpty()
         val studentName = binding.inputStudentName.text?.toString()?.trim().orEmpty()
         if (studentId.isBlank()) {
-            Toast.makeText(this, "Enter roll / student ID", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.enroll_enter_roll, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (studentName.isBlank()) {
+            Toast.makeText(this, R.string.enroll_enter_name, Toast.LENGTH_SHORT).show()
             return
         }
         if (apiOnline == false) {
@@ -364,12 +454,7 @@ class EnrollActivity : AppCompatActivity() {
                         DeviceAuthResult.Offline -> ConnectionStatus.State.Offline
                         else -> ConnectionStatus.State.Unauthorized
                     }
-                    ConnectionStatus.bind(
-                        binding.connectionDot,
-                        binding.connectionStatus,
-                        state,
-                        this@EnrollActivity,
-                    )
+                    bindConnection(state)
                     val msg = when (auth) {
                         is DeviceAuthResult.Failed -> auth.message
                         else -> getString(R.string.enroll_offline_block)
@@ -402,7 +487,7 @@ class EnrollActivity : AppCompatActivity() {
                         embedding = template,
                         modelVersion = ArcFaceEmbedder.MODEL_VERSION,
                         imageCount = embeddings.size,
-                        name = studentName.ifBlank { null },
+                        name = studentName,
                         enrollmentNumber = studentId,
                     )
                 }
@@ -441,12 +526,14 @@ class EnrollActivity : AppCompatActivity() {
         setSaving(false)
         binding.btnCancel.isEnabled = true
         updateUi()
-        startCamera()
+        if (faceStepStarted) startCamera()
     }
 
     private fun startCamera() {
+        if (!faceStepStarted) return
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
+            if (!faceStepStarted) return@addListener
             val provider = providerFuture.get()
             cameraProvider = provider
             val preview = Preview.Builder().build().also {
@@ -457,7 +544,7 @@ class EnrollActivity : AppCompatActivity() {
                 .build()
             analysis.setAnalyzer(cameraExecutor) { image ->
                 try {
-                    if (capturingPaused.get()) return@setAnalyzer
+                    if (capturingPaused.get() || !faceStepStarted) return@setAnalyzer
                     val bmp = imageProxyToBitmap(image)
                     if (bmp != null) pendingFrame.set(bmp)
                 } finally {

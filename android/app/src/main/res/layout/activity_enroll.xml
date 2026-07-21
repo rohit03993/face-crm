@@ -7,194 +7,309 @@
     android:background="@color/ink"
     android:clipToPadding="false">
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewView"
+    <!-- Step 1: details only (no camera yet) -->
+    <ScrollView
+        android:id="@+id/detailsStep"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@id/controls"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <View
-        android:layout_width="0dp"
-        android:layout_height="160dp"
-        android:background="@drawable/bg_scrim_top"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <View
-        android:id="@+id/faceGuide"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:alpha="0.8"
-        android:background="@drawable/bg_face_oval"
-        app:layout_constraintBottom_toTopOf="@id/controls"
-        app:layout_constraintDimensionRatio="3:4"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintWidth_percent="0.55" />
-
-    <TextView
-        android:id="@+id/enrollTitle"
-        style="@style/Text.FaceVerify.Brand"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="20dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:text="@string/add_student"
-        android:textAllCaps="false"
-        app:layout_constraintEnd_toStartOf="@id/connectionPill"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <LinearLayout
-        android:id="@+id/connectionPill"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="16dp"
-        android:background="@drawable/bg_connection_pill"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="8dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <View
-            android:id="@+id/connectionDot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:background="@drawable/bg_dot" />
-
-        <TextView
-            android:id="@+id/connectionStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/status_checking"
-            android:textColor="@color/mist"
-            android:textSize="12sp" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/hintText"
-        style="@style/Text.FaceVerify.Hint"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="20dp"
-        android:layout_marginTop="6dp"
-        android:text="@string/enroll_subtitle"
-        android:textColor="@color/mist"
-        android:textSize="17sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/enrollTitle" />
-
-    <LinearLayout
-        android:id="@+id/controls"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_bottom_sheet"
-        android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingTop="18dp"
-        android:paddingBottom="20dp"
+        android:fillViewport="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/student_id"
-            app:boxStrokeColor="@color/teal"
-            app:hintTextColor="@color/mist_dim">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/inputStudentId"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textCapCharacters"
-                android:textColor="@color/mist"
-                android:textSize="18sp" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:hint="@string/student_name"
-            app:boxStrokeColor="@color/teal"
-            app:hintTextColor="@color/mist_dim">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/inputStudentName"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textPersonName|textCapWords"
-                android:textColor="@color/mist"
-                android:textSize="17sp" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <TextView
-            android:id="@+id/captureCount"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="0 of 3 captured"
-            android:textColor="@color/teal_bright"
-            android:textSize="15sp" />
-
-        <ProgressBar
-            android:id="@+id/enrollProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="8dp"
-            android:layout_marginTop="8dp"
-            android:max="4"
-            android:progress="0"
-            android:progressDrawable="@drawable/bg_progress" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="28dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/enrollTitle"
+                    style="@style/Text.FaceVerify.Brand"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/add_student"
+                    android:textAllCaps="false" />
+
+                <LinearLayout
+                    android:id="@+id/connectionPill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_connection_pill"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="8dp">
+
+                    <View
+                        android:id="@+id/connectionDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/bg_dot" />
+
+                    <TextView
+                        android:id="@+id/connectionStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/status_checking"
+                        android:textColor="@color/mist"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/enroll_details_title"
+                android:textColor="@color/mist"
+                android:textSize="22sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/enroll_details_hint"
+                android:textColor="@color/mist_dim"
+                android:textSize="16sp" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:hint="@string/student_id"
+                app:boxStrokeColor="@color/teal"
+                app:hintTextColor="@color/mist_dim">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/inputStudentId"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapCharacters"
+                    android:textColor="@color/mist"
+                    android:textSize="18sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/student_name"
+                app:boxStrokeColor="@color/teal"
+                app:hintTextColor="@color/mist_dim">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/inputStudentName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPersonName|textCapWords"
+                    android:textColor="@color/mist"
+                    android:textSize="17sp" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnCapture"
+                android:id="@+id/btnContinueFace"
                 style="@style/Widget.FaceVerify.Button"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp"
-                android:layout_weight="1"
-                android:text="@string/capture" />
+                android:layout_marginTop="24dp"
+                android:text="@string/enroll_continue_face" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnUpload"
+                android:id="@+id/btnCancelDetails"
                 style="@style/Widget.FaceVerify.Button.Ghost"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:enabled="false"
-                android:text="@string/save_student" />
+                android:layout_marginTop="10dp"
+                android:text="@string/back" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Step 2: face capture -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/captureStep"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.camera.view.PreviewView
+            android:id="@+id/previewView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintBottom_toTopOf="@id/controls"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="160dp"
+            android:background="@drawable/bg_scrim_top"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <View
+            android:id="@+id/faceGuide"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:alpha="0.8"
+            android:background="@drawable/bg_face_oval"
+            app:layout_constraintBottom_toTopOf="@id/controls"
+            app:layout_constraintDimensionRatio="3:4"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_percent="0.55" />
+
+        <TextView
+            android:id="@+id/captureTitle"
+            style="@style/Text.FaceVerify.Brand"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:text="@string/add_student"
+            android:textAllCaps="false"
+            app:layout_constraintEnd_toStartOf="@id/connectionPillCapture"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <LinearLayout
+            android:id="@+id/connectionPillCapture"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_connection_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <View
+                android:id="@+id/connectionDotCapture"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/bg_dot" />
+
+            <TextView
+                android:id="@+id/connectionStatusCapture"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/status_checking"
+                android:textColor="@color/mist"
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnCancel"
-            style="@style/Widget.FaceVerify.Button.Ghost"
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/hintText"
+            style="@style/Text.FaceVerify.Hint"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="@string/back" />
-    </LinearLayout>
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="6dp"
+            android:text="@string/enroll_subtitle"
+            android:textColor="@color/mist"
+            android:textSize="17sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/captureTitle" />
 
-    <!-- Full-screen busy state while saving (competitor-style processing screen) -->
+        <LinearLayout
+            android:id="@+id/controls"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_bottom_sheet"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="18dp"
+            android:paddingBottom="20dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <TextView
+                android:id="@+id/studentSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/mist"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/captureCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="0 of 3 captured"
+                android:textColor="@color/teal_bright"
+                android:textSize="15sp" />
+
+            <ProgressBar
+                android:id="@+id/enrollProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:layout_marginTop="8dp"
+                android:max="4"
+                android:progress="0"
+                android:progressDrawable="@drawable/bg_progress" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCapture"
+                    style="@style/Widget.FaceVerify.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/capture" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUpload"
+                    style="@style/Widget.FaceVerify.Button.Ghost"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:enabled="false"
+                    android:text="@string/save_student" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancel"
+                style="@style/Widget.FaceVerify.Button.Ghost"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/back" />
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
     <FrameLayout
         android:id="@+id/savingOverlay"
         android:layout_width="0dp"

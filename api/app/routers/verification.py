@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import logging
 import uuid
+from zoneinfo import ZoneInfo
 
 import cv2
 import numpy as np
@@ -230,14 +231,12 @@ async def camera_identify(
             None,
         )
         if recent:
-            # Sliding presence window: as long as this face remains visible, keep
-            # extending the cooldown. This prevents a stationary student from
-            # receiving an automatic OUT punch after a fixed interval.
-            recent.resolved_at = datetime.now(timezone.utc)
-            recent_meta = dict(recent.meta or {})
-            recent_meta["last_seen_at"] = recent.resolved_at.isoformat()
-            recent.meta = recent_meta
-            db.commit()
+            marked_at = recent.resolved_at
+            if marked_at.tzinfo is None:
+                marked_at = marked_at.replace(tzinfo=timezone.utc)
+            marked_local = marked_at.astimezone(ZoneInfo(settings.app_timezone))
+            hour = marked_local.hour % 12 or 12
+            marked_label = f"{hour}:{marked_local.minute:02d} {'AM' if marked_local.hour < 12 else 'PM'}"
             return CameraIdentifyOut(
                 matched=True,
                 attendance_recorded=True,
@@ -247,7 +246,11 @@ async def camera_identify(
                 name=best_student.name,
                 score=best_score,
                 threshold=settings.match_threshold,
-                message="Already recorded within the cooldown window.",
+                marked_at=marked_at.isoformat(),
+                message=(
+                    f"Attendance already marked at {marked_label}. "
+                    "Try again after 15 minutes."
+                ),
             )
 
     request_id = str(uuid.uuid4())
@@ -283,6 +286,7 @@ async def camera_identify(
         name=best_student.name,
         score=best_score,
         threshold=settings.match_threshold,
+        marked_at=now.isoformat(),
         message="Attendance recorded.",
     )
 

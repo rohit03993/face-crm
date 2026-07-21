@@ -29,6 +29,7 @@ import com.school.faceverify.net.JsonLite
 import com.school.faceverify.net.KioskWebSocket
 import com.school.faceverify.net.OfflineResultQueue
 import com.school.faceverify.net.VerificationRequestMsg
+import com.school.faceverify.util.AttendanceFormat
 import com.school.faceverify.util.FeedbackPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -337,9 +338,15 @@ class MainActivity : AppCompatActivity() {
                             delay(2500)
                         }
                         result.matched && result.alreadyProcessed -> {
-                            // Same person still in frame; server cooldown already
-                            // protected CRM from another IN/OUT punch.
-                            delay(900)
+                            withContext(Dispatchers.Main) {
+                                binding.statusBanner.text = getString(R.string.already_marked)
+                                binding.statusHint.text = AttendanceFormat.alreadyMarkedHint(
+                                    result.markedAt,
+                                    result.message,
+                                )
+                                setStatusTone(StatusTone.VERIFY)
+                            }
+                            delay(1800)
                         }
                         result.matched -> {
                             withContext(Dispatchers.Main) {

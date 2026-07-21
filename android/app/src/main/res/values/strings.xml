@@ -113,7 +113,7 @@
     <string name="face_not_registered">This face not registered</string>
     <string name="face_not_registered_hint">Enroll this student first from Students</string>
     <string name="face_not_registered_score">Best score %.2f · need %.2f · re-enroll if score is close</string>
-    <string name="already_marked">Already marked</string>
+    <string name="already_marked">Attendance already marked</string>
     <string name="enroll_details_title">Student details</string>
     <string name="enroll_details_hint">Enter roll number and name first, then capture the face.</string>
     <string name="enroll_continue_face">Continue to face capture</string>

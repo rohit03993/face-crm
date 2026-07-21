@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # Same face enrolled under two students — block if similarity >= this.
     duplicate_face_threshold: float = 0.45
     verification_timeout_seconds: int = 30
-    camera_punch_cooldown_seconds: int = 60
+    camera_punch_cooldown_seconds: int = 900
 
     storage_dir: str = "./storage"
     faces_dir: str = "./storage/faces"

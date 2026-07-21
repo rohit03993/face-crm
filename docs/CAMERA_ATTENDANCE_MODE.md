@@ -22,7 +22,7 @@
 ```env
 PLATFORM_ADMIN_TOKEN=<vendor-secret>
 APP_TIMEZONE=Asia/Kolkata
-CAMERA_PUNCH_COOLDOWN_SECONDS=60
+CAMERA_PUNCH_COOLDOWN_SECONDS=900
 ```
 
 Add schools via `/platform/admin` (or `POST /platform/tenants`).  

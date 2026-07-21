@@ -28,6 +28,7 @@ import com.school.faceverify.face.FrameConverter
 import com.school.faceverify.face.PresenceGate
 import com.school.faceverify.face.PresenceIssue
 import com.school.faceverify.net.FaceApiClient
+import com.school.faceverify.util.AttendanceFormat
 import com.school.faceverify.util.FeedbackPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -191,13 +192,15 @@ class AttendanceActivity : AppCompatActivity() {
                         val student = result.name ?: result.enrollmentNumber ?: "Student"
                         withContext(Dispatchers.Main) {
                             binding.statusBanner.text = getString(R.string.already_marked)
-                            binding.statusHint.text =
-                                "$student  ·  ${"%.2f".format(result.score ?: 0f)}"
-                            binding.faceGuide.ovalState = FaceOvalOverlay.OvalState.SUCCESS
+                            binding.statusHint.text = AttendanceFormat.alreadyMarkedHint(
+                                result.markedAt,
+                                result.message,
+                            )
+                            binding.faceGuide.ovalState = FaceOvalOverlay.OvalState.FAIL
                             binding.faceGuide.applyAlpha()
-                            setTone(Tone.PASS)
+                            setTone(Tone.VERIFY)
                         }
-                        delay(700)
+                        delay(1800)
                     }
                     result.matched -> {
                         withContext(Dispatchers.Main) {

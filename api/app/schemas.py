@@ -259,6 +259,7 @@ class CameraIdentifyOut(BaseModel):
     score: float | None = None
     threshold: float
     message: str | None = None
+    marked_at: str | None = None
 
 
 class WsVerificationPayload(BaseModel):

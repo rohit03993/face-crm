@@ -22,6 +22,7 @@ data class CameraIdentifyResult(
     val score: Float?,
     val threshold: Float,
     val message: String?,
+    val markedAt: String? = null,
 )
 
 data class StudentListItem(
@@ -147,6 +148,7 @@ class FaceApiClient(
                 score = if (json.isNull("score")) null else json.optDouble("score").toFloat(),
                 threshold = json.optDouble("threshold", 0.4).toFloat(),
                 message = json.optStringOrNull("message"),
+                markedAt = json.optStringOrNull("marked_at"),
             )
         }
     }

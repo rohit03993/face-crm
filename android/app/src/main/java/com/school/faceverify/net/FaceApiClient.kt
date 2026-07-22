@@ -32,6 +32,7 @@ data class StudentListItem(
     val batch: String?,
     val enrolled: Boolean,
     val imageCount: Int,
+    val hasFacePhoto: Boolean = false,
 )
 
 sealed class DeviceAuthResult {
@@ -84,6 +85,7 @@ class FaceApiClient(
                             batch = json.optStringOrNull("batch"),
                             enrolled = json.optBoolean("enrolled", false),
                             imageCount = json.optInt("image_count", 0),
+                            hasFacePhoto = json.optBoolean("has_face_photo", false),
                         ),
                     )
                 }
@@ -252,6 +254,40 @@ class FaceApiClient(
             if (!json.optBoolean("duplicate", false)) return null
             return json.optString("message").takeIf { it.isNotBlank() }
                 ?: "This face is already enrolled for another student"
+        }
+    }
+
+    /** Download the enrollment reference photo used when the face was registered. */
+    fun fetchFacePhoto(studentId: String): ByteArray? {
+        val encodedId = encodePath(studentId)
+        val request = Request.Builder()
+            .url("$base/students/$encodedId/face-photo")
+            .header("Authorization", "Bearer $deviceToken")
+            .get()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) return null
+            return resp.body?.bytes()
+        }
+    }
+
+    fun uploadFacePhoto(studentId: String, jpegFile: File): Pair<Boolean, String> {
+        val encodedId = encodePath(studentId)
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "photo",
+                jpegFile.name,
+                jpegFile.asRequestBody("image/jpeg".toMediaType()),
+            )
+            .build()
+        val request = Request.Builder()
+            .url("$base/students/$encodedId/face-photo")
+            .header("Authorization", "Bearer $deviceToken")
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { resp ->
+            return resp.isSuccessful to friendlyError(resp.code, resp.body?.string().orEmpty())
         }
     }
 

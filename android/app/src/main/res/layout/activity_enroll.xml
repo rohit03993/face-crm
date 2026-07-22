@@ -256,6 +256,67 @@
                 android:textColor="@color/mist"
                 android:textSize="15sp" />
 
+            <LinearLayout
+                android:id="@+id/referencePhotoPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/student_current_photo"
+                        android:textColor="@color/mist_dim"
+                        android:textSize="12sp" />
+
+                    <ImageView
+                        android:id="@+id/currentPhoto"
+                        android:layout_width="88dp"
+                        android:layout_height="88dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_photo_placeholder"
+                        android:contentDescription="@string/student_current_photo"
+                        android:scaleType="centerCrop" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/newPhotoPanel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/student_new_photo"
+                        android:textColor="@color/teal_bright"
+                        android:textSize="12sp" />
+
+                    <ImageView
+                        android:id="@+id/newPhotoPreview"
+                        android:layout_width="88dp"
+                        android:layout_height="88dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_photo_placeholder"
+                        android:contentDescription="@string/student_new_photo"
+                        android:scaleType="centerCrop" />
+                </LinearLayout>
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/captureCount"
                 android:layout_width="match_parent"

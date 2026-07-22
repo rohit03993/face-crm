@@ -25,6 +25,7 @@ import com.school.faceverify.face.FacePipeline
 import com.school.faceverify.face.FrameConverter
 import com.school.faceverify.net.DeviceAuthResult
 import com.school.faceverify.net.FaceApiClient
+import com.school.faceverify.net.FacePhotoLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +34,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -60,6 +64,7 @@ class EnrollActivity : AppCompatActivity() {
     private var poseHoldStartedAt = 0L
     private var faceStepStarted = false
     private var modelLoading = false
+    private var capturedPhoto: Bitmap? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -181,6 +186,7 @@ class EnrollActivity : AppCompatActivity() {
         )
         binding.hintText.text = getString(R.string.enroll_model_loading)
         updateUi()
+        loadCurrentEnrollmentPhoto()
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -189,6 +195,27 @@ class EnrollActivity : AppCompatActivity() {
             ensureModelAndCapture()
         } else {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun loadCurrentEnrollmentPhoto() {
+        val sid = existingStudentId?.takeIf { it.isNotBlank() } ?: return
+        if (!editMode && !faceOnly) return
+        binding.referencePhotoPanel.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val client = FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
+                FacePhotoLoader.loadInto(
+                    scope = lifecycleScope,
+                    imageView = binding.currentPhoto,
+                    client = client,
+                    studentId = sid,
+                    placeholderRes = R.drawable.bg_photo_placeholder,
+                )
+            } catch (_: Exception) {
+                binding.currentPhoto.setImageResource(R.drawable.bg_photo_placeholder)
+            }
         }
     }
 
@@ -391,6 +418,14 @@ class EnrollActivity : AppCompatActivity() {
                     return@launch
                 }
                 embeddings.add(emb)
+                capturedPhoto?.recycle()
+                capturedPhoto = result.aligned.copy(
+                    result.aligned.config ?: Bitmap.Config.ARGB_8888,
+                    false,
+                )
+                binding.referencePhotoPanel.visibility = View.VISIBLE
+                binding.newPhotoPanel.visibility = View.VISIBLE
+                binding.newPhotoPreview.setImageBitmap(capturedPhoto)
                 updateUi()
                 Toast.makeText(
                     this@EnrollActivity,
@@ -531,6 +566,23 @@ class EnrollActivity : AppCompatActivity() {
                     )
                 }
                 if (ok) {
+                    val savedStudentId = runCatching {
+                        JSONObject(body).optString("student_id").takeIf { it.isNotBlank() }
+                    }.getOrNull() ?: enrollKey
+                    val photo = capturedPhoto
+                    if (photo != null) {
+                        binding.savingStep.text = getString(R.string.enroll_saving_photo)
+                        val jpeg = withContext(Dispatchers.IO) { bitmapToJpeg(photo) }
+                        val (photoOk, photoBody) = withContext(Dispatchers.IO) {
+                            client.uploadFacePhoto(savedStudentId, jpeg)
+                        }
+                        jpeg.delete()
+                        if (!photoOk) {
+                            throw IllegalStateException(
+                                photoBody.take(160).ifBlank { "Photo upload failed" },
+                            )
+                        }
+                    }
                     val msg = if (editMode) getString(R.string.student_updated) else "Student saved"
                     Toast.makeText(this@EnrollActivity, msg, Toast.LENGTH_LONG).show()
                     setResult(RESULT_OK)
@@ -602,6 +654,16 @@ class EnrollActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
         pipeline?.close()
         embedder?.close()
+        capturedPhoto?.recycle()
+        capturedPhoto = null
+    }
+
+    private fun bitmapToJpeg(bitmap: Bitmap): File {
+        val file = File(cacheDir, "enroll_photo_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out)
+        }
+        return file
     }
 
     companion object {

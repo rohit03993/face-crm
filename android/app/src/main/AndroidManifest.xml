@@ -57,6 +57,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".ui.StudentDetailActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".ui.EnrollActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

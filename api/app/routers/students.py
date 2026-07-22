@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.auth import require_crm_or_device, require_crm_token, require_tenant_crm
@@ -83,6 +84,7 @@ def list_students(
                 batch=student.batch,
                 enrolled=template is not None,
                 image_count=template.image_count if template else 0,
+                has_face_photo=_student_has_face_photo(db, student.id),
             )
         )
     return items
@@ -145,6 +147,57 @@ def _resolve_student(db: Session, student_id: str, *, tenant_id: str | None = No
     if tenant_id and student.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
+
+
+def _enrollment_photo_path(student_id: str) -> Path:
+    return Path(settings.faces_dir) / student_id / "enrollment.jpg"
+
+
+def _student_has_face_photo(db: Session, student_id: str) -> bool:
+    row = (
+        db.query(FaceImage)
+        .filter(FaceImage.student_id == student_id)
+        .order_by(FaceImage.created_at.desc())
+        .first()
+    )
+    if row is None:
+        return False
+    return Path(row.path).is_file()
+
+
+def _resolve_face_photo_path(db: Session, student_id: str) -> Path | None:
+    row = (
+        db.query(FaceImage)
+        .filter(FaceImage.student_id == student_id)
+        .order_by(FaceImage.created_at.desc())
+        .first()
+    )
+    if row is None:
+        return None
+    path = Path(row.path)
+    return path if path.is_file() else None
+
+
+def _save_enrollment_photo(db: Session, student_id: str, raw: bytes) -> Path:
+    try:
+        img = decode_image_bytes(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid image: {exc}") from exc
+
+    face_dir = Path(settings.faces_dir) / student_id
+    face_dir.mkdir(parents=True, exist_ok=True)
+    path = _enrollment_photo_path(student_id)
+    cv2.imwrite(str(path), img)
+
+    for old in db.query(FaceImage).filter(FaceImage.student_id == student_id).all():
+        if old.path != str(path):
+            try:
+                Path(old.path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        db.delete(old)
+    db.add(FaceImage(student_id=student_id, path=str(path), angle="enrollment"))
+    return path
 
 
 def _clear_face_data(db: Session, student_id: str) -> None:
@@ -437,6 +490,37 @@ def get_student(
     auth=Depends(require_crm_or_device),
 ) -> Student:
     return _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
+
+
+@router.get("/{student_id}/face-photo")
+def get_face_photo(
+    student_id: str,
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device),
+) -> FileResponse:
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
+    path = _resolve_face_photo_path(db, student.id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No enrollment photo for this student")
+    return FileResponse(path, media_type="image/jpeg", filename=f"{student.enrollment_number}.jpg")
+
+
+@router.post("/{student_id}/face-photo", status_code=status.HTTP_200_OK)
+async def upload_face_photo(
+    student_id: str,
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device),
+) -> dict:
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
+    raw = await photo.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty image upload")
+    if len(raw) > 2_000_000:
+        raise HTTPException(status_code=400, detail="Image too large (max 2MB)")
+    _save_enrollment_photo(db, student.id, raw)
+    db.commit()
+    return {"ok": True, "student_id": student.id}
 
 
 @router.patch("/{student_id}", response_model=StudentOut)

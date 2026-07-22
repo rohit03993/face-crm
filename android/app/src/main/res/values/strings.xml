@@ -25,6 +25,12 @@
     <string name="students_no_ready">No students with a face yet</string>
     <string name="students_synced_from_crm">Synced from School CRM</string>
     <string name="add_face">Add face</string>
+    <string name="student_profile">Student profile</string>
+    <string name="student_face_photo_label">Enrollment photo</string>
+    <string name="student_no_face_photo">No photo saved yet — add a face to store the reference image.</string>
+    <string name="student_current_photo">Current photo</string>
+    <string name="student_new_photo">New photo</string>
+    <string name="enroll_saving_photo">Saving enrollment photo…</string>
     <string name="status_missing_face">Missing face</string>
     <string name="students_load_failed">Could not load students</string>
     <string name="add_student">Add student</string>

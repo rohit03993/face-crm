@@ -1,7 +1,6 @@
 package com.school.faceverify.ui
 
 import android.content.Intent
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -23,6 +22,7 @@ import com.school.faceverify.R
 import com.school.faceverify.databinding.ActivityStudentsBinding
 import com.school.faceverify.databinding.ItemStudentBinding
 import com.school.faceverify.net.FaceApiClient
+import com.school.faceverify.net.FacePhotoLoader
 import com.school.faceverify.net.StudentListItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,8 +34,10 @@ import kotlinx.coroutines.withContext
 class StudentsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityStudentsBinding
     private val adapter = StudentAdapter(
+        onOpenProfile = { openProfile(it) },
         onAddFace = { openAddFace(it) },
         onMore = { showMoreOptions(it) },
+        photoLoader = { imageView, item -> loadStudentPhoto(imageView, item) },
     )
     private var statusJob: Job? = null
     private var searchJob: Job? = null
@@ -119,6 +121,36 @@ class StudentsActivity : AppCompatActivity() {
             return false
         }
         return true
+    }
+
+    private fun openProfile(item: StudentListItem) {
+        startActivity(StudentDetailActivity.intentFor(this, item))
+    }
+
+    private fun loadStudentPhoto(
+        imageView: android.widget.ImageView,
+        item: StudentListItem,
+    ) {
+        if (!item.enrolled || !item.hasFacePhoto) {
+            FacePhotoLoader.cancel(imageView)
+            imageView.setImageResource(R.drawable.bg_photo_placeholder)
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val client = FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
+                FacePhotoLoader.loadInto(
+                    scope = lifecycleScope,
+                    imageView = imageView,
+                    client = client,
+                    studentId = item.id,
+                    placeholderRes = R.drawable.bg_photo_placeholder,
+                )
+            } catch (_: Exception) {
+                imageView.setImageResource(R.drawable.bg_photo_placeholder)
+            }
+        }
     }
 
     private fun openAddFace(item: StudentListItem) {
@@ -314,22 +346,31 @@ class StudentsActivity : AppCompatActivity() {
     }
 
     private class StudentAdapter(
+        private val onOpenProfile: (StudentListItem) -> Unit,
         private val onAddFace: (StudentListItem) -> Unit,
         private val onMore: (StudentListItem) -> Unit,
+        private val photoLoader: (android.widget.ImageView, StudentListItem) -> Unit,
     ) : ListAdapter<StudentListItem, StudentAdapter.Holder>(DIFF) {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val binding = ItemStudentBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            return Holder(binding, onAddFace, onMore)
+            return Holder(binding, onOpenProfile, onAddFace, onMore, photoLoader)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
             holder.bind(getItem(position))
         }
 
+        override fun onViewRecycled(holder: Holder) {
+            FacePhotoLoader.cancel(holder.binding.studentPhoto)
+            super.onViewRecycled(holder)
+        }
+
         class Holder(
             private val binding: ItemStudentBinding,
+            private val onOpenProfile: (StudentListItem) -> Unit,
             private val onAddFace: (StudentListItem) -> Unit,
             private val onMore: (StudentListItem) -> Unit,
+            private val photoLoader: (android.widget.ImageView, StudentListItem) -> Unit,
         ) : RecyclerView.ViewHolder(binding.root) {
             fun bind(item: StudentListItem) {
                 val ctx = binding.root.context
@@ -343,24 +384,18 @@ class StudentsActivity : AppCompatActivity() {
                     binding.studentStatus.setBackgroundResource(R.drawable.bg_status_ready)
                     binding.studentStatus.setTextColor(ContextCompat.getColor(ctx, R.color.teal_bright))
                     binding.btnFaceAction.text = ctx.getString(R.string.update_face)
-                    binding.faceIndicator.background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(ContextCompat.getColor(ctx, R.color.pass))
-                    }
                 } else {
                     binding.studentStatus.text = ctx.getString(R.string.status_missing_face)
                     binding.studentStatus.setBackgroundResource(R.drawable.bg_status_missing)
                     binding.studentStatus.setTextColor(ContextCompat.getColor(ctx, R.color.amber))
                     binding.btnFaceAction.text = ctx.getString(R.string.add_face)
-                    binding.faceIndicator.background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(ContextCompat.getColor(ctx, R.color.amber))
-                    }
                 }
 
+                photoLoader(binding.studentPhoto, item)
                 binding.btnFaceAction.setOnClickListener { onAddFace(item) }
                 binding.btnMore.setOnClickListener { onMore(item) }
-                binding.root.setOnClickListener { onAddFace(item) }
+                binding.root.setOnClickListener { onOpenProfile(item) }
+                binding.studentPhoto.setOnClickListener { onOpenProfile(item) }
             }
         }
 

@@ -43,6 +43,7 @@ class StudentListItem(BaseModel):
     batch: str | None
     enrolled: bool
     image_count: int
+    has_face_photo: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.auth import require_crm_or_device, require_crm_token, require_tenant_crm
+from app.auth import require_crm_or_device, require_crm_or_device_admin, require_crm_token, require_tenant_crm
 from app.config import get_settings
 from app.db import get_db
 from app.face_engine import average_embeddings, decode_image_bytes, extract_embedding
@@ -461,7 +461,7 @@ def update_student_post(
     student_id: str,
     body: StudentUpdate,
     db: Session = Depends(get_db),
-    auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device_admin),
 ) -> Student:
     student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     _apply_student_update(student, body, db)
@@ -474,7 +474,7 @@ def update_student_post(
 def remove_student_post(
     student_id: str,
     db: Session = Depends(get_db),
-    auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device_admin),
 ) -> dict:
     student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     sid = student.id
@@ -528,7 +528,7 @@ def update_student(
     student_id: str,
     body: StudentUpdate,
     db: Session = Depends(get_db),
-    auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device_admin),
 ) -> Student:
     student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     _apply_student_update(student, body, db)
@@ -541,7 +541,7 @@ def update_student(
 def delete_student(
     student_id: str,
     db: Session = Depends(get_db),
-    auth=Depends(require_crm_or_device),
+    auth=Depends(require_crm_or_device_admin),
 ) -> None:
     student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
     _delete_student_cascade(db, student)

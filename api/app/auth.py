@@ -3,7 +3,7 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, Header, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -222,3 +222,47 @@ def require_app_admin(user: AppUser = Depends(require_app_user)) -> AppUser:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return user
+
+
+def resolve_app_user_from_token(raw_token: str, db: Session) -> AppUser:
+    token_hash = hash_token(raw_token.strip())
+    session = db.query(AppSession).filter(AppSession.token_hash == token_hash).first()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user session")
+    if session.expires_at is not None:
+        exp = session.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    user = db.get(AppUser, session.user_id)
+    if not user or user.is_active != 1:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    return user
+
+
+def require_crm_or_device_admin(
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer),
+    x_user_token: str | None = Header(default=None, alias="X-User-Token"),
+    db: Session = Depends(get_db),
+) -> tuple[str, Device | None, Tenant | None]:
+    """
+    CRM token: allowed as today.
+    Device token: also requires X-User-Token of an admin in the same school.
+    Used only for delete / edit-details — not for attendance or face enroll.
+    """
+    auth = require_crm_or_device(credentials, db)
+    kind, device, tenant = auth
+    if kind == "crm":
+        return auth
+    if not x_user_token or not x_user_token.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin login required for this action",
+        )
+    user = resolve_app_user_from_token(x_user_token, db)
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    if device is not None and user.tenant_id != device.tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Wrong school for this user")
+    return auth

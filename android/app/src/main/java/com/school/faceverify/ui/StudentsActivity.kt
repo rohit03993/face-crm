@@ -240,11 +240,17 @@ class StudentsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val session = FaceVerifyApp.instance.settings.currentSession()
+                if (!session.isAdmin || session.userToken.isBlank()) {
+                    Toast.makeText(this@StudentsActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
                 val (ok, body) = withContext(Dispatchers.IO) {
                     FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).updateStudent(
                         studentId = studentId,
                         name = name,
                         enrollmentNumber = enrollment,
+                        userToken = session.userToken,
                     )
                 }
                 if (ok) {
@@ -279,8 +285,14 @@ class StudentsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val session = FaceVerifyApp.instance.settings.currentSession()
+                if (!session.isAdmin || session.userToken.isBlank()) {
+                    Toast.makeText(this@StudentsActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
                 val (ok, body) = withContext(Dispatchers.IO) {
-                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).deleteStudent(item.id)
+                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
+                        .deleteStudent(item.id, session.userToken)
                 }
                 if (ok) {
                     Toast.makeText(this@StudentsActivity, R.string.student_deleted, Toast.LENGTH_SHORT).show()

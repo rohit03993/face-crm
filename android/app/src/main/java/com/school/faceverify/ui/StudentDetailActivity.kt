@@ -177,11 +177,17 @@ class StudentDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val session = FaceVerifyApp.instance.settings.currentSession()
+                if (!session.isAdmin || session.userToken.isBlank()) {
+                    Toast.makeText(this@StudentDetailActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
                 val (ok, body) = withContext(Dispatchers.IO) {
                     FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).updateStudent(
                         studentId = student.id,
                         name = name,
                         enrollmentNumber = enrollment,
+                        userToken = session.userToken,
                     )
                 }
                 if (ok) {

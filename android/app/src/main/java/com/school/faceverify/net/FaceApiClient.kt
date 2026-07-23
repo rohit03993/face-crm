@@ -309,6 +309,7 @@ class FaceApiClient(
         studentId: String,
         name: String?,
         enrollmentNumber: String?,
+        userToken: String,
     ): Pair<Boolean, String> {
         val payload = JSONObject()
         if (!name.isNullOrBlank()) payload.put("name", name.trim())
@@ -320,6 +321,7 @@ class FaceApiClient(
         val request = Request.Builder()
             .url("$base/students/$encodedId/update")
             .header("Authorization", "Bearer $deviceToken")
+            .header("X-User-Token", userToken.trim())
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { resp ->
@@ -327,12 +329,13 @@ class FaceApiClient(
         }
     }
 
-    fun deleteStudent(studentId: String): Pair<Boolean, String> {
+    fun deleteStudent(studentId: String, userToken: String): Pair<Boolean, String> {
         val encodedId = encodePath(studentId)
         // Prefer POST /remove — DELETE is blocked on some networks / old proxies.
         val request = Request.Builder()
             .url("$base/students/$encodedId/remove")
             .header("Authorization", "Bearer $deviceToken")
+            .header("X-User-Token", userToken.trim())
             .post("{}".toRequestBody("application/json".toMediaType()))
             .build()
         client.newCall(request).execute().use { resp ->

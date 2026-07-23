@@ -19,13 +19,24 @@ data class KioskConfig(
     val deviceToken: String = "",
     val threshold: Float = DEFAULT_THRESHOLD,
     val cameraAttendanceMode: Boolean = false,
+    val deviceMode: DeviceMode = DeviceMode.KIOSK,
+    val staffPin: String = DEFAULT_STAFF_PIN,
+    val adminPin: String = DEFAULT_ADMIN_PIN,
 ) {
     companion object {
         const val DEFAULT_THRESHOLD = 0.30f
+        const val DEFAULT_STAFF_PIN = "1234"
+        const val DEFAULT_ADMIN_PIN = "9999"
     }
 
     val hasFaceUrl: Boolean
         get() = apiBaseUrl.trim().isNotEmpty()
+
+    fun matchesStaffPin(pin: String): Boolean =
+        pin.trim() == staffPin.trim().ifBlank { DEFAULT_STAFF_PIN }
+
+    fun matchesAdminPin(pin: String): Boolean =
+        pin.trim() == adminPin.trim().ifBlank { DEFAULT_ADMIN_PIN }
 }
 
 class AppSettings(private val context: Context) {
@@ -34,6 +45,9 @@ class AppSettings(private val context: Context) {
     private val keyToken = stringPreferencesKey("device_token")
     private val keyThreshold = floatPreferencesKey("threshold")
     private val keyCameraAttendanceMode = booleanPreferencesKey("camera_attendance_mode")
+    private val keyDeviceMode = stringPreferencesKey("device_mode")
+    private val keyStaffPin = stringPreferencesKey("staff_pin")
+    private val keyAdminPin = stringPreferencesKey("admin_pin")
 
     val configFlow: Flow<KioskConfig> = context.dataStore.data.map { prefs ->
         KioskConfig(
@@ -42,6 +56,14 @@ class AppSettings(private val context: Context) {
             deviceToken = prefs[keyToken]?.trim().orEmpty(),
             threshold = prefs[keyThreshold] ?: KioskConfig.DEFAULT_THRESHOLD,
             cameraAttendanceMode = prefs[keyCameraAttendanceMode] ?: false,
+            deviceMode = when (prefs[keyDeviceMode]) {
+                DeviceMode.STAFF.name -> DeviceMode.STAFF
+                else -> DeviceMode.KIOSK
+            },
+            staffPin = prefs[keyStaffPin]?.trim()?.ifBlank { null }
+                ?: KioskConfig.DEFAULT_STAFF_PIN,
+            adminPin = prefs[keyAdminPin]?.trim()?.ifBlank { null }
+                ?: KioskConfig.DEFAULT_ADMIN_PIN,
         )
     }
 
@@ -54,6 +76,9 @@ class AppSettings(private val context: Context) {
             prefs[keyToken] = config.deviceToken.trim()
             prefs[keyThreshold] = config.threshold
             prefs[keyCameraAttendanceMode] = config.cameraAttendanceMode
+            prefs[keyDeviceMode] = config.deviceMode.name
+            prefs[keyStaffPin] = config.staffPin.trim().ifBlank { KioskConfig.DEFAULT_STAFF_PIN }
+            prefs[keyAdminPin] = config.adminPin.trim().ifBlank { KioskConfig.DEFAULT_ADMIN_PIN }
         }
     }
 }

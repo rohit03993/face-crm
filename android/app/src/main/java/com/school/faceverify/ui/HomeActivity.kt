@@ -8,6 +8,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.R
+import com.school.faceverify.data.AccessSession
+import com.school.faceverify.data.DeviceMode
 import com.school.faceverify.databinding.ActivityHomeBinding
 import com.school.faceverify.face.ModelStore
 import com.school.faceverify.net.FaceApiClient
@@ -22,6 +24,7 @@ class HomeActivity : AppCompatActivity() {
     private var statusJob: Job? = null
     private var modelReady = false
     private var modelJob: Job? = null
+    private var deviceMode: DeviceMode = DeviceMode.KIOSK
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,10 +38,25 @@ class HomeActivity : AppCompatActivity() {
         }
         binding.cardStudents.setOnClickListener {
             if (!ensureModelReadyOrToast()) return@setOnClickListener
-            startActivity(Intent(this, StudentsActivity::class.java))
+            PinGate.requireStaff(this) {
+                startActivity(Intent(this, StudentsActivity::class.java))
+            }
+        }
+        binding.btnUnlockStaff.setOnClickListener {
+            PinGate.requireStaff(this) {
+                applyAccessUi()
+                Toast.makeText(this, R.string.students_menu, Toast.LENGTH_SHORT).show()
+            }
+        }
+        binding.btnLockSession.setOnClickListener {
+            AccessSession.lock()
+            applyAccessUi()
+            Toast.makeText(this, R.string.home_lock_session, Toast.LENGTH_SHORT).show()
         }
         binding.btnSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            PinGate.requireAdmin(this) {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
         }
 
         prepareFaceModel()
@@ -46,6 +64,7 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshModeAndAccess()
         refreshSummary()
         // Retry download after user fixes Face URL in Settings.
         if (!modelReady && !ModelStore.isReady(this)) {
@@ -61,6 +80,32 @@ class HomeActivity : AppCompatActivity() {
         statusJob?.cancel()
         statusJob = null
         super.onPause()
+    }
+
+    private fun refreshModeAndAccess() {
+        lifecycleScope.launch {
+            val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+            deviceMode = cfg.deviceMode
+            if (deviceMode == DeviceMode.STAFF) {
+                AccessSession.unlock(com.school.faceverify.data.AccessLevel.STAFF)
+            }
+            applyAccessUi()
+        }
+    }
+
+    private fun applyAccessUi() {
+        val staffOpen = deviceMode == DeviceMode.STAFF || AccessSession.hasStaff()
+        binding.modeBadge.text = when {
+            AccessSession.hasAdmin() -> getString(R.string.pin_admin_title)
+            staffOpen && deviceMode == DeviceMode.KIOSK -> getString(R.string.pin_staff_title)
+            deviceMode == DeviceMode.STAFF -> getString(R.string.home_mode_staff)
+            else -> getString(R.string.home_mode_kiosk)
+        }
+        binding.cardStudents.visibility = if (staffOpen) View.VISIBLE else View.GONE
+        binding.btnUnlockStaff.visibility =
+            if (deviceMode == DeviceMode.KIOSK && !staffOpen) View.VISIBLE else View.GONE
+        binding.btnLockSession.visibility =
+            if (deviceMode == DeviceMode.KIOSK && AccessSession.hasStaff()) View.VISIBLE else View.GONE
     }
 
     private fun ensureModelReadyOrToast(): Boolean {

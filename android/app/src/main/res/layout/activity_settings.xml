@@ -145,6 +145,93 @@
                 android:textColor="@color/mist" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/settings_access_section"
+            android:textColor="@color/mist"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/device_mode_hint"
+            android:textColor="@color/mist_dim"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/device_mode_label"
+            android:textColor="@color/mist_dim"
+            android:textSize="12sp" />
+
+        <RadioGroup
+            android:id="@+id/deviceModeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/modeKiosk"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/device_mode_kiosk"
+                android:textColor="@color/mist" />
+
+            <RadioButton
+                android:id="@+id/modeStaff"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/device_mode_staff"
+                android:textColor="@color/mist" />
+        </RadioGroup>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:hint="@string/staff_pin_label"
+            app:boxStrokeColor="@color/teal"
+            app:endIconMode="password_toggle"
+            app:helperText="Default 1234 — for Students / faces"
+            app:helperTextEnabled="true"
+            app:hintTextColor="@color/mist_dim">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/inputStaffPin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberPassword"
+                android:maxLength="8"
+                android:textColor="@color/mist" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:hint="@string/admin_pin_label"
+            app:boxStrokeColor="@color/teal"
+            app:endIconMode="password_toggle"
+            app:helperText="Default 9999 — for Settings, delete, edit details"
+            app:helperTextEnabled="true"
+            app:hintTextColor="@color/mist_dim">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/inputAdminPin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberPassword"
+                android:maxLength="8"
+                android:textColor="@color/mist" />
+        </com.google.android.material.textfield.TextInputLayout>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             style="@style/Widget.FaceVerify.Button"

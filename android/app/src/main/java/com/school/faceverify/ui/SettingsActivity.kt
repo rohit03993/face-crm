@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.R
+import com.school.faceverify.data.DeviceMode
 import com.school.faceverify.data.KioskConfig
 import com.school.faceverify.databinding.ActivitySettingsBinding
 import com.school.faceverify.net.DeviceAuthResult
@@ -33,6 +34,13 @@ class SettingsActivity : AppCompatActivity() {
             binding.inputDeviceId.setText(cfg.deviceId)
             binding.inputDeviceToken.setText(cfg.deviceToken)
             binding.inputThreshold.setText(cfg.threshold.toString())
+            binding.inputStaffPin.setText(cfg.staffPin)
+            binding.inputAdminPin.setText(cfg.adminPin)
+            if (cfg.deviceMode == DeviceMode.STAFF) {
+                binding.modeStaff.isChecked = true
+            } else {
+                binding.modeKiosk.isChecked = true
+            }
         }
 
         binding.btnSave.setOnClickListener {
@@ -57,14 +65,29 @@ class SettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            val staffPin = binding.inputStaffPin.text?.toString()?.trim().orEmpty()
+            val adminPin = binding.inputAdminPin.text?.toString()?.trim().orEmpty()
+            if (staffPin.length < 4 || adminPin.length < 4) {
+                Toast.makeText(this, "Staff and Admin PIN must be at least 4 digits", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            if (staffPin == adminPin) {
+                Toast.makeText(this, "Staff and Admin PIN must be different", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
             val threshold = binding.inputThreshold.text?.toString()?.toFloatOrNull()
                 ?: KioskConfig.DEFAULT_THRESHOLD
+            val mode = if (binding.modeStaff.isChecked) DeviceMode.STAFF else DeviceMode.KIOSK
             val cfg = KioskConfig(
                 apiBaseUrl = url,
                 deviceId = deviceId,
                 deviceToken = deviceToken,
                 threshold = threshold,
                 cameraAttendanceMode = false,
+                deviceMode = mode,
+                staffPin = staffPin,
+                adminPin = adminPin,
             )
 
             binding.btnSave.isEnabled = false

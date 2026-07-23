@@ -7,6 +7,8 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -44,6 +46,9 @@ class StudentsActivity : AppCompatActivity() {
     private var apiOnline: Boolean? = null
     private var allStudents = emptyList<StudentListItem>()
     private var currentFilter = FaceFilter.ALL
+    private var selectedBatch: String? = null
+    private var batchLabels = listOf<String>()
+    private var updatingBatchSpinner = false
 
     private enum class FaceFilter { ALL, MISSING, READY }
 
@@ -73,6 +78,16 @@ class StudentsActivity : AppCompatActivity() {
                 }
             }
         })
+
+        binding.batchSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (updatingBatchSpinner) return
+                selectedBatch = if (position <= 0) null else batchLabels.getOrNull(position)
+                applyFilterAndSubmit()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
 
         binding.chipAll.setOnClickListener { setFilter(FaceFilter.ALL) }
         binding.chipMissing.setOnClickListener { setFilter(FaceFilter.MISSING) }
@@ -178,9 +193,9 @@ class StudentsActivity : AppCompatActivity() {
                 ),
             ) { _, which ->
                 when (which) {
-                    0 -> showEditDetailsDialog(item)
+                    0 -> PinGate.requireAdmin(this) { showEditDetailsDialog(item) }
                     1 -> openAddFace(item)
-                    2 -> confirmDelete(item)
+                    2 -> PinGate.requireAdmin(this) { confirmDelete(item) }
                 }
             }
             .setNegativeButton(R.string.back, null)
@@ -285,6 +300,7 @@ class StudentsActivity : AppCompatActivity() {
                 allStudents = students.sortedWith(
                     compareBy<StudentListItem> { it.enrolled }.thenBy { it.name.lowercase() },
                 )
+                refreshBatchSpinner()
                 updateSummary()
                 applyFilterAndSubmit()
             } catch (e: Exception) {
@@ -298,6 +314,26 @@ class StudentsActivity : AppCompatActivity() {
                 binding.listLoading.visibility = View.GONE
             }
         }
+    }
+
+    private fun refreshBatchSpinner() {
+        val batches = allStudents
+            .mapNotNull { it.batch?.trim()?.takeIf { b -> b.isNotEmpty() } }
+            .distinct()
+            .sortedBy { it.lowercase() }
+        val previous = selectedBatch
+        batchLabels = listOf(getString(R.string.students_batch_all)) + batches
+        updatingBatchSpinner = true
+        binding.batchSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            batchLabels,
+        )
+        val index = previous?.let { batches.indexOf(it) }?.takeIf { it >= 0 }?.plus(1) ?: 0
+        selectedBatch = if (index > 0) batches[index - 1] else null
+        binding.batchSpinner.setSelection(index, false)
+        binding.batchSpinner.visibility = if (batches.isEmpty()) View.GONE else View.VISIBLE
+        updatingBatchSpinner = false
     }
 
     private fun updateSummary() {
@@ -319,21 +355,25 @@ class StudentsActivity : AppCompatActivity() {
 
     private fun applyFilterAndSubmit() {
         val query = binding.searchInput.text?.toString()?.trim().orEmpty().lowercase()
+        val batch = selectedBatch
         val filtered = allStudents.filter { item ->
             val matchesFilter = when (currentFilter) {
                 FaceFilter.ALL -> true
                 FaceFilter.MISSING -> !item.enrolled
                 FaceFilter.READY -> item.enrolled
             }
+            val matchesBatch = batch == null ||
+                item.batch?.trim().equals(batch, ignoreCase = true) == true
             val matchesQuery = query.isEmpty() ||
                 item.name.lowercase().contains(query) ||
                 item.enrollmentNumber.lowercase().contains(query)
-            matchesFilter && matchesQuery
+            matchesFilter && matchesBatch && matchesQuery
         }
         adapter.submitList(filtered)
         binding.emptyState.text = when {
             allStudents.isEmpty() -> getString(R.string.students_empty)
             query.isNotEmpty() -> getString(R.string.students_no_search_results, query)
+            batch != null && filtered.isEmpty() -> getString(R.string.students_no_batch_match)
             currentFilter == FaceFilter.MISSING -> getString(R.string.students_no_missing)
             currentFilter == FaceFilter.READY -> getString(R.string.students_no_ready)
             else -> getString(R.string.students_empty)
@@ -361,7 +401,7 @@ class StudentsActivity : AppCompatActivity() {
         }
 
         override fun onViewRecycled(holder: Holder) {
-            FacePhotoLoader.cancel(holder.binding.studentPhoto)
+            holder.onRecycled()
             super.onViewRecycled(holder)
         }
 
@@ -372,6 +412,10 @@ class StudentsActivity : AppCompatActivity() {
             private val onMore: (StudentListItem) -> Unit,
             private val photoLoader: (android.widget.ImageView, StudentListItem) -> Unit,
         ) : RecyclerView.ViewHolder(binding.root) {
+            fun onRecycled() {
+                FacePhotoLoader.cancel(binding.studentPhoto)
+            }
+
             fun bind(item: StudentListItem) {
                 val ctx = binding.root.context
                 binding.studentName.text = item.name

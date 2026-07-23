@@ -57,7 +57,9 @@ class StudentDetailActivity : AppCompatActivity() {
 
         binding.btnBack.setOnClickListener { finish() }
         binding.btnUpdateFace.setOnClickListener { openFaceEnroll() }
-        binding.btnEditDetails.setOnClickListener { showEditDetailsDialog() }
+        binding.btnEditDetails.setOnClickListener {
+            PinGate.requireAdmin(this) { showEditDetailsDialog() }
+        }
     }
 
     override fun onResume() {

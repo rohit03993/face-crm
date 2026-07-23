@@ -273,3 +273,36 @@ class WsVerificationPayload(BaseModel):
     embedding: list[float]
     threshold: float
     timeout_seconds: int
+
+
+class AppUserBootstrapIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=6, max_length=128)
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class AppUserLoginIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class AppUserCreateStaffIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=6, max_length=128)
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class AppUserOut(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AppAuthOut(BaseModel):
+    user_token: str
+    user: AppUserOut
+    message: str | None = None

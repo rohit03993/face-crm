@@ -33,6 +33,16 @@
         </activity>
 
         <activity
+            android:name=".ui.LoginActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".ui.StaffUsersActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".ui.AttendanceActivity"
             android:exported="false"
             android:launchMode="singleTask"

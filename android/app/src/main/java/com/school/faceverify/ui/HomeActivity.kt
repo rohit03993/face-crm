@@ -8,8 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.school.faceverify.FaceVerifyApp
 import com.school.faceverify.R
-import com.school.faceverify.data.AccessSession
-import com.school.faceverify.data.DeviceMode
+import com.school.faceverify.data.UserSession
 import com.school.faceverify.databinding.ActivityHomeBinding
 import com.school.faceverify.face.ModelStore
 import com.school.faceverify.net.FaceApiClient
@@ -24,7 +23,7 @@ class HomeActivity : AppCompatActivity() {
     private var statusJob: Job? = null
     private var modelReady = false
     private var modelJob: Job? = null
-    private var deviceMode: DeviceMode = DeviceMode.KIOSK
+    private var session: UserSession = UserSession()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,35 +37,36 @@ class HomeActivity : AppCompatActivity() {
         }
         binding.cardStudents.setOnClickListener {
             if (!ensureModelReadyOrToast()) return@setOnClickListener
-            PinGate.requireStaff(this) {
-                startActivity(Intent(this, StudentsActivity::class.java))
-            }
+            startActivity(Intent(this, StudentsActivity::class.java))
         }
-        binding.btnUnlockStaff.setOnClickListener {
-            PinGate.requireStaff(this) {
-                applyAccessUi()
-                Toast.makeText(this, R.string.students_menu, Toast.LENGTH_SHORT).show()
-            }
-        }
-        binding.btnLockSession.setOnClickListener {
-            AccessSession.lock()
-            applyAccessUi()
-            Toast.makeText(this, R.string.home_lock_session, Toast.LENGTH_SHORT).show()
+        binding.btnStaffUsers.setOnClickListener {
+            startActivity(Intent(this, StaffUsersActivity::class.java))
         }
         binding.btnSettings.setOnClickListener {
-            PinGate.requireAdmin(this) {
-                startActivity(Intent(this, SettingsActivity::class.java))
-            }
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
+        binding.btnLogout.setOnClickListener { logout() }
 
         prepareFaceModel()
     }
 
     override fun onResume() {
         super.onResume()
-        refreshModeAndAccess()
-        refreshSummary()
-        // Retry download after user fixes Face URL in Settings.
+        lifecycleScope.launch {
+            val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+            session = FaceVerifyApp.instance.settings.currentSession()
+            if (!cfg.hasDeviceAuth) {
+                startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
+                return@launch
+            }
+            if (!session.isLoggedIn) {
+                startActivity(Intent(this@HomeActivity, LoginActivity::class.java))
+                finish()
+                return@launch
+            }
+            applyRoleUi()
+            refreshSummary()
+        }
         if (!modelReady && !ModelStore.isReady(this)) {
             prepareFaceModel()
         }
@@ -82,30 +82,39 @@ class HomeActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    private fun refreshModeAndAccess() {
-        lifecycleScope.launch {
-            val cfg = FaceVerifyApp.instance.settings.configFlow.first()
-            deviceMode = cfg.deviceMode
-            if (deviceMode == DeviceMode.STAFF) {
-                AccessSession.unlock(com.school.faceverify.data.AccessLevel.STAFF)
-            }
-            applyAccessUi()
-        }
+    private fun applyRoleUi() {
+        binding.modeBadge.text = getString(
+            R.string.home_logged_in_as,
+            session.name.ifBlank { session.email },
+            session.role.replaceFirstChar { it.uppercase() },
+        )
+        binding.cardStudents.visibility = View.VISIBLE
+        binding.btnStaffUsers.visibility = if (session.isAdmin) View.VISIBLE else View.GONE
+        binding.btnSettings.visibility = if (session.isAdmin) View.VISIBLE else View.GONE
+        binding.btnLogout.visibility = View.VISIBLE
     }
 
-    private fun applyAccessUi() {
-        val staffOpen = deviceMode == DeviceMode.STAFF || AccessSession.hasStaff()
-        binding.modeBadge.text = when {
-            AccessSession.hasAdmin() -> getString(R.string.pin_admin_title)
-            staffOpen && deviceMode == DeviceMode.KIOSK -> getString(R.string.pin_staff_title)
-            deviceMode == DeviceMode.STAFF -> getString(R.string.home_mode_staff)
-            else -> getString(R.string.home_mode_kiosk)
+    private fun logout() {
+        lifecycleScope.launch {
+            try {
+                val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val token = session.userToken
+                if (token.isNotBlank()) {
+                    withContext(Dispatchers.IO) {
+                        FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).logout(token)
+                    }
+                }
+            } catch (_: Exception) {
+                // Still clear local session.
+            }
+            FaceVerifyApp.instance.settings.clearSession()
+            startActivity(
+                Intent(this@HomeActivity, LoginActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                },
+            )
+            finish()
         }
-        binding.cardStudents.visibility = if (staffOpen) View.VISIBLE else View.GONE
-        binding.btnUnlockStaff.visibility =
-            if (deviceMode == DeviceMode.KIOSK && !staffOpen) View.VISIBLE else View.GONE
-        binding.btnLockSession.visibility =
-            if (deviceMode == DeviceMode.KIOSK && AccessSession.hasStaff()) View.VISIBLE else View.GONE
     }
 
     private fun ensureModelReadyOrToast(): Boolean {

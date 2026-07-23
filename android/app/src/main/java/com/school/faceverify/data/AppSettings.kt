@@ -19,24 +19,33 @@ data class KioskConfig(
     val deviceToken: String = "",
     val threshold: Float = DEFAULT_THRESHOLD,
     val cameraAttendanceMode: Boolean = false,
-    val deviceMode: DeviceMode = DeviceMode.KIOSK,
-    val staffPin: String = DEFAULT_STAFF_PIN,
-    val adminPin: String = DEFAULT_ADMIN_PIN,
 ) {
     companion object {
         const val DEFAULT_THRESHOLD = 0.30f
-        const val DEFAULT_STAFF_PIN = "1234"
-        const val DEFAULT_ADMIN_PIN = "9999"
     }
 
     val hasFaceUrl: Boolean
         get() = apiBaseUrl.trim().isNotEmpty()
 
-    fun matchesStaffPin(pin: String): Boolean =
-        pin.trim() == staffPin.trim().ifBlank { DEFAULT_STAFF_PIN }
+    val hasDeviceAuth: Boolean
+        get() = hasFaceUrl && deviceId.isNotBlank() && deviceToken.isNotBlank()
+}
 
-    fun matchesAdminPin(pin: String): Boolean =
-        pin.trim() == adminPin.trim().ifBlank { DEFAULT_ADMIN_PIN }
+data class UserSession(
+    val userToken: String = "",
+    val userId: String = "",
+    val email: String = "",
+    val name: String = "",
+    val role: String = "",
+) {
+    val isLoggedIn: Boolean
+        get() = userToken.isNotBlank()
+
+    val isAdmin: Boolean
+        get() = role.equals("admin", ignoreCase = true)
+
+    val isStaffOrAdmin: Boolean
+        get() = isLoggedIn && (isAdmin || role.equals("staff", ignoreCase = true))
 }
 
 class AppSettings(private val context: Context) {
@@ -45,9 +54,11 @@ class AppSettings(private val context: Context) {
     private val keyToken = stringPreferencesKey("device_token")
     private val keyThreshold = floatPreferencesKey("threshold")
     private val keyCameraAttendanceMode = booleanPreferencesKey("camera_attendance_mode")
-    private val keyDeviceMode = stringPreferencesKey("device_mode")
-    private val keyStaffPin = stringPreferencesKey("staff_pin")
-    private val keyAdminPin = stringPreferencesKey("admin_pin")
+    private val keyUserToken = stringPreferencesKey("user_token")
+    private val keyUserId = stringPreferencesKey("user_id")
+    private val keyUserEmail = stringPreferencesKey("user_email")
+    private val keyUserName = stringPreferencesKey("user_name")
+    private val keyUserRole = stringPreferencesKey("user_role")
 
     val configFlow: Flow<KioskConfig> = context.dataStore.data.map { prefs ->
         KioskConfig(
@@ -56,18 +67,22 @@ class AppSettings(private val context: Context) {
             deviceToken = prefs[keyToken]?.trim().orEmpty(),
             threshold = prefs[keyThreshold] ?: KioskConfig.DEFAULT_THRESHOLD,
             cameraAttendanceMode = prefs[keyCameraAttendanceMode] ?: false,
-            deviceMode = when (prefs[keyDeviceMode]) {
-                DeviceMode.STAFF.name -> DeviceMode.STAFF
-                else -> DeviceMode.KIOSK
-            },
-            staffPin = prefs[keyStaffPin]?.trim()?.ifBlank { null }
-                ?: KioskConfig.DEFAULT_STAFF_PIN,
-            adminPin = prefs[keyAdminPin]?.trim()?.ifBlank { null }
-                ?: KioskConfig.DEFAULT_ADMIN_PIN,
+        )
+    }
+
+    val sessionFlow: Flow<UserSession> = context.dataStore.data.map { prefs ->
+        UserSession(
+            userToken = prefs[keyUserToken]?.trim().orEmpty(),
+            userId = prefs[keyUserId]?.trim().orEmpty(),
+            email = prefs[keyUserEmail]?.trim().orEmpty(),
+            name = prefs[keyUserName]?.trim().orEmpty(),
+            role = prefs[keyUserRole]?.trim().orEmpty(),
         )
     }
 
     suspend fun current(): KioskConfig = configFlow.first()
+
+    suspend fun currentSession(): UserSession = sessionFlow.first()
 
     suspend fun save(config: KioskConfig) {
         context.dataStore.edit { prefs ->
@@ -76,9 +91,24 @@ class AppSettings(private val context: Context) {
             prefs[keyToken] = config.deviceToken.trim()
             prefs[keyThreshold] = config.threshold
             prefs[keyCameraAttendanceMode] = config.cameraAttendanceMode
-            prefs[keyDeviceMode] = config.deviceMode.name
-            prefs[keyStaffPin] = config.staffPin.trim().ifBlank { KioskConfig.DEFAULT_STAFF_PIN }
-            prefs[keyAdminPin] = config.adminPin.trim().ifBlank { KioskConfig.DEFAULT_ADMIN_PIN }
+            // Drop legacy PIN keys if present.
+            prefs.remove(stringPreferencesKey("device_mode"))
+            prefs.remove(stringPreferencesKey("staff_pin"))
+            prefs.remove(stringPreferencesKey("admin_pin"))
         }
+    }
+
+    suspend fun saveSession(session: UserSession) {
+        context.dataStore.edit { prefs ->
+            prefs[keyUserToken] = session.userToken.trim()
+            prefs[keyUserId] = session.userId.trim()
+            prefs[keyUserEmail] = session.email.trim()
+            prefs[keyUserName] = session.name.trim()
+            prefs[keyUserRole] = session.role.trim()
+        }
+    }
+
+    suspend fun clearSession() {
+        saveSession(UserSession())
     }
 }

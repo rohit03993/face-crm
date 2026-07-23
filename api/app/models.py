@@ -169,3 +169,42 @@ class FailCapture(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     request: Mapped["VerificationRequest"] = relationship(back_populates="fail_captures")
+
+
+class AppUserRole(str, enum.Enum):
+    ADMIN = "admin"
+    STAFF = "staff"
+
+
+class AppUser(Base):
+    """School admin/staff accounts for the Android kiosk app (email + password)."""
+
+    __tablename__ = "app_users"
+    __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_app_users_tenant_email"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(32), default=AppUserRole.STAFF.value)
+    is_active: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    tenant: Mapped["Tenant"] = relationship()
+    sessions: Mapped[list["AppSession"]] = relationship(back_populates="user")
+
+
+class AppSession(Base):
+    __tablename__ = "app_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("app_users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["AppUser"] = relationship(back_populates="sessions")

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import get_settings
 from app.face_engine import ensure_storage_dirs
-from app.routers import devices, platform, students, verification, ws
+from app.routers import auth_users, devices, platform, students, verification, ws
 from app.schemas import HealthResponse
 from app.timeout_job import timeout_loop
 
@@ -50,6 +50,7 @@ app.include_router(devices.router)
 app.include_router(verification.router)
 app.include_router(ws.router)
 app.include_router(platform.router)
+app.include_router(auth_users.router)
 
 # Phone downloads ArcFace ONNX from here (keeps APK small).
 _models_dir = Path(settings.storage_dir) / "models"

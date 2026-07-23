@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,10 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.models import Device, Tenant
+from app.models import AppSession, AppUser, Device, Tenant
 
 bearer = HTTPBearer(auto_error=False)
 settings = get_settings()
+
+_PBKDF2_ROUNDS = 120_000
 
 
 def hash_token(raw: str) -> str:
@@ -21,6 +24,34 @@ def hash_token(raw: str) -> str:
 
 def generate_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        f"{settings.device_token_pepper}:{salt}".encode(),
+        _PBKDF2_ROUNDS,
+    )
+    return f"pbkdf2${_PBKDF2_ROUNDS}${salt}${digest.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        algo, rounds_s, salt, digest_hex = stored.split("$", 3)
+        if algo != "pbkdf2":
+            return False
+        rounds = int(rounds_s)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            f"{settings.device_token_pepper}:{salt}".encode(),
+            rounds,
+        )
+        return hmac.compare_digest(digest.hex(), digest_hex)
+    except Exception:
+        return False
 
 
 def _platform_admin_token() -> str:
@@ -147,3 +178,47 @@ def require_crm_or_device(
         return ("crm", None, tenant)
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+def create_user_session(db: Session, user: AppUser, days: int = 30) -> str:
+    plain = generate_token()
+    session = AppSession(
+        user_id=user.id,
+        token_hash=hash_token(plain),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=days),
+    )
+    db.add(session)
+    db.commit()
+    return plain
+
+
+def require_app_user(
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer),
+    db: Session = Depends(get_db),
+) -> AppUser:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
+    token_hash = hash_token(credentials.credentials)
+    session = (
+        db.query(AppSession)
+        .filter(AppSession.token_hash == token_hash)
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user session")
+    if session.expires_at is not None:
+        exp = session.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    user = db.get(AppUser, session.user_id)
+    if not user or user.is_active != 1:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    return user
+
+
+def require_app_admin(user: AppUser = Depends(require_app_user)) -> AppUser:
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return user

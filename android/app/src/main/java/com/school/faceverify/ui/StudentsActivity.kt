@@ -138,6 +138,17 @@ class StudentsActivity : AppCompatActivity() {
         return true
     }
 
+    private fun requireAdmin(action: () -> Unit) {
+        lifecycleScope.launch {
+            val session = FaceVerifyApp.instance.settings.currentSession()
+            if (!session.isAdmin) {
+                Toast.makeText(this@StudentsActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            action()
+        }
+    }
+
     private fun openProfile(item: StudentListItem) {
         startActivity(StudentDetailActivity.intentFor(this, item))
     }
@@ -193,9 +204,9 @@ class StudentsActivity : AppCompatActivity() {
                 ),
             ) { _, which ->
                 when (which) {
-                    0 -> PinGate.requireAdmin(this) { showEditDetailsDialog(item) }
+                    0 -> requireAdmin { showEditDetailsDialog(item) }
                     1 -> openAddFace(item)
-                    2 -> PinGate.requireAdmin(this) { confirmDelete(item) }
+                    2 -> requireAdmin { confirmDelete(item) }
                 }
             }
             .setNegativeButton(R.string.back, null)

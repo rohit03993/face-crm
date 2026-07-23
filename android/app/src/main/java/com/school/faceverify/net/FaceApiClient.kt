@@ -41,6 +41,20 @@ sealed class DeviceAuthResult {
     data class Failed(val message: String) : DeviceAuthResult()
 }
 
+data class AppUserInfo(
+    val id: String,
+    val email: String,
+    val name: String,
+    val role: String,
+    val isActive: Boolean = true,
+)
+
+data class AppAuthResult(
+    val userToken: String,
+    val user: AppUserInfo,
+    val message: String? = null,
+)
+
 class FaceApiClient(
     private val apiBaseUrl: String,
     private val deviceToken: String,
@@ -383,6 +397,139 @@ class FaceApiClient(
             DeviceAuthResult.Offline
         }
     }
+
+    fun authStatus(): Pair<Boolean, Boolean> {
+        // returns needsBootstrap to hasUsers via Pair(needsBootstrap, hasUsers)
+        val request = Request.Builder()
+            .url("$base/auth/status")
+            .header("Authorization", "Bearer $deviceToken")
+            .get()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                throw IOException(friendlyError(resp.code, raw))
+            }
+            val json = JSONObject(raw)
+            return json.optBoolean("needs_bootstrap", false) to json.optBoolean("has_users", false)
+        }
+    }
+
+    fun bootstrapAdmin(email: String, password: String, name: String): AppAuthResult =
+        postAuth("/auth/bootstrap", email, password, name)
+
+    fun login(email: String, password: String): AppAuthResult =
+        postAuth("/auth/login", email, password, name = null)
+
+    private fun postAuth(
+        path: String,
+        email: String,
+        password: String,
+        name: String?,
+    ): AppAuthResult {
+        val payload = JSONObject()
+            .put("email", email.trim())
+            .put("password", password)
+        if (!name.isNullOrBlank()) payload.put("name", name.trim())
+        val request = Request.Builder()
+            .url("$base$path")
+            .header("Authorization", "Bearer $deviceToken")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                throw IOException(friendlyError(resp.code, raw))
+            }
+            return parseAuth(raw)
+        }
+    }
+
+    fun logout(userToken: String): Boolean {
+        val request = Request.Builder()
+            .url("$base/auth/logout")
+            .header("Authorization", "Bearer $userToken")
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+        return try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun listAppUsers(userToken: String): List<AppUserInfo> {
+        val request = Request.Builder()
+            .url("$base/auth/users")
+            .header("Authorization", "Bearer $userToken")
+            .get()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw IOException(friendlyError(resp.code, raw))
+            val arr = JSONArray(raw)
+            return buildList {
+                for (i in 0 until arr.length()) {
+                    add(parseUser(arr.getJSONObject(i)))
+                }
+            }
+        }
+    }
+
+    fun createStaff(
+        userToken: String,
+        email: String,
+        password: String,
+        name: String,
+    ): AppUserInfo {
+        val payload = JSONObject()
+            .put("email", email.trim())
+            .put("password", password)
+            .put("name", name.trim())
+        val request = Request.Builder()
+            .url("$base/auth/users")
+            .header("Authorization", "Bearer $userToken")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw IOException(friendlyError(resp.code, raw))
+            return parseUser(JSONObject(raw))
+        }
+    }
+
+    fun deactivateUser(userToken: String, userId: String): Boolean {
+        val request = Request.Builder()
+            .url("$base/auth/users/${encodePath(userId)}")
+            .header("Authorization", "Bearer $userToken")
+            .delete()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException(friendlyError(resp.code, resp.body?.string().orEmpty()))
+            }
+            return true
+        }
+    }
+
+    private fun parseAuth(raw: String): AppAuthResult {
+        val json = JSONObject(raw)
+        val userJson = json.getJSONObject("user")
+        return AppAuthResult(
+            userToken = json.getString("user_token"),
+            user = parseUser(userJson),
+            message = json.optString("message").takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun parseUser(json: JSONObject): AppUserInfo =
+        AppUserInfo(
+            id = json.optString("id"),
+            email = json.optString("email"),
+            name = json.optString("name"),
+            role = json.optString("role"),
+            isActive = json.optBoolean("is_active", true),
+        )
 
     /** Older Face API without /devices/me — token-only check via /students. */
     private fun verifyViaStudentsFallback(): DeviceAuthResult {

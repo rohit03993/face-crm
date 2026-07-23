@@ -58,7 +58,14 @@ class StudentDetailActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnUpdateFace.setOnClickListener { openFaceEnroll() }
         binding.btnEditDetails.setOnClickListener {
-            PinGate.requireAdmin(this) { showEditDetailsDialog() }
+            lifecycleScope.launch {
+                val session = FaceVerifyApp.instance.settings.currentSession()
+                if (!session.isAdmin) {
+                    Toast.makeText(this@StudentDetailActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                showEditDetailsDialog()
+            }
         }
     }
 

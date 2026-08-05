@@ -17,6 +17,9 @@ class StudentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     batch: str | None = None
     crm_student_id: str | None = None
+    # CRM may send "staff" when syncing Staff ID faces; default remains student.
+    subject: str | None = Field(default=None, max_length=16)
+    crm_user_id: str | None = None
     id: str | None = None
 
 
@@ -24,6 +27,7 @@ class StudentUpdate(BaseModel):
     enrollment_number: str | None = Field(default=None, min_length=1, max_length=64)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     batch: str | None = None
+    subject: str | None = Field(default=None, max_length=16)
 
 
 class StudentOut(BaseModel):
@@ -32,6 +36,7 @@ class StudentOut(BaseModel):
     name: str
     batch: str | None
     crm_student_id: str | None
+    subject: str = "student"
 
     model_config = {"from_attributes": True}
 
@@ -44,6 +49,7 @@ class StudentListItem(BaseModel):
     enrolled: bool
     image_count: int
     has_face_photo: bool = False
+    subject: str = "student"
 
     model_config = {"from_attributes": True}
 

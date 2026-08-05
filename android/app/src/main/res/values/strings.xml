@@ -3,7 +3,7 @@
     <string name="app_name">Task Book</string>
     <string name="brand">Task Book</string>
     <string name="brand_tagline">Attendance gate</string>
-    <string name="home_subtitle">Sync students from School CRM, add faces here, then start attendance. Face model downloads once (~166 MB).</string>
+    <string name="home_subtitle">Sync students &amp; staff from School CRM, add faces here, then start attendance. Face model downloads once (~166 MB).</string>
     <string name="home_logged_in_as">%1$s · %2$s</string>
     <string name="logout">Log out</string>
     <string name="admin_only">Admin only</string>
@@ -39,6 +39,14 @@
     <string name="ready_for_punch_hint">Stand in the oval, look at the camera, and hold still to mark attendance.</string>
     <string name="students_menu">Students</string>
     <string name="students_menu_hint">Search by name or roll · add missing faces</string>
+    <string name="staff_faces_menu">Staff</string>
+    <string name="staff_faces_menu_hint">Staff synced from School CRM · add faces here</string>
+    <string name="staff_faces_summary">%1$d ready · %2$d missing · %3$d total</string>
+    <string name="staff_faces_empty">No staff synced yet.\nIn School CRM: import staff → Sync to Face API, then add faces here.</string>
+    <string name="staff_faces_crm_hint">Staff sync from School CRM (name &amp; Staff ID). Add or update faces on this device — same as students.</string>
+    <string name="staff_faces_search_hint">Search by name or Staff ID</string>
+    <string name="staff_faces_batch_all">All designations</string>
+    <string name="staff_faces_loading">Loading staff…</string>
     <string name="students_summary">%1$d ready · %2$d missing · %3$d total</string>
     <string name="students_summary_full">%1$d ready · %2$d missing face · %3$d total</string>
     <string name="students_loading">Loading students…</string>

@@ -34,7 +34,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class StudentsActivity : AppCompatActivity() {
+    companion object {
+        const val EXTRA_SUBJECT = "subject"
+        const val SUBJECT_STUDENT = "student"
+        const val SUBJECT_STAFF = "staff"
+
+        fun intentFor(context: android.content.Context, subject: String = SUBJECT_STUDENT): Intent {
+            return Intent(context, StudentsActivity::class.java).putExtra(EXTRA_SUBJECT, subject)
+        }
+    }
+
     private lateinit var binding: ActivityStudentsBinding
+    private val listSubject: String by lazy {
+        intent.getStringExtra(EXTRA_SUBJECT)?.lowercase()?.trim().orEmpty().ifBlank { SUBJECT_STUDENT }
+    }
+    private val isStaffMode: Boolean get() = listSubject == SUBJECT_STAFF
     private val adapter = StudentAdapter(
         onOpenProfile = { openProfile(it) },
         onAddFace = { openAddFace(it) },
@@ -62,6 +76,12 @@ class StudentsActivity : AppCompatActivity() {
         binding.studentsList.adapter = adapter
         binding.studentsList.setHasFixedSize(true)
         binding.studentsList.itemAnimator = null
+
+        binding.screenTitle.setText(if (isStaffMode) R.string.staff_faces_menu else R.string.students_menu)
+        binding.crmHint.setText(if (isStaffMode) R.string.staff_faces_crm_hint else R.string.students_crm_hint)
+        binding.searchInput.hint = getString(
+            if (isStaffMode) R.string.staff_faces_search_hint else R.string.students_search_hint,
+        )
 
         binding.btnBack.setOnClickListener { finish() }
         binding.btnRetry.setOnClickListener { refresh() }
@@ -311,14 +331,16 @@ class StudentsActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
-        binding.listSummary.text = getString(R.string.students_loading)
+        binding.listSummary.text = getString(
+            if (isStaffMode) R.string.staff_faces_loading else R.string.students_loading,
+        )
         binding.listLoading.visibility = View.VISIBLE
         binding.btnRetry.visibility = View.GONE
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 val students = withContext(Dispatchers.IO) {
-                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).listStudents()
+                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).listStudents(listSubject)
                 }
                 allStudents = students.sortedWith(
                     compareBy<StudentListItem> { it.enrolled }.thenBy { it.name.lowercase() },
@@ -345,7 +367,9 @@ class StudentsActivity : AppCompatActivity() {
             .distinct()
             .sortedBy { it.lowercase() }
         val previous = selectedBatch
-        batchLabels = listOf(getString(R.string.students_batch_all)) + batches
+        batchLabels = listOf(
+            getString(if (isStaffMode) R.string.staff_faces_batch_all else R.string.students_batch_all),
+        ) + batches
         updatingBatchSpinner = true
         binding.batchSpinner.adapter = ArrayAdapter(
             this,
@@ -394,12 +418,14 @@ class StudentsActivity : AppCompatActivity() {
         }
         adapter.submitList(filtered)
         binding.emptyState.text = when {
-            allStudents.isEmpty() -> getString(R.string.students_empty)
+            allStudents.isEmpty() -> getString(
+                if (isStaffMode) R.string.staff_faces_empty else R.string.students_empty,
+            )
             query.isNotEmpty() -> getString(R.string.students_no_search_results, query)
             batch != null && filtered.isEmpty() -> getString(R.string.students_no_batch_match)
             currentFilter == FaceFilter.MISSING -> getString(R.string.students_no_missing)
             currentFilter == FaceFilter.READY -> getString(R.string.students_no_ready)
-            else -> getString(R.string.students_empty)
+            else -> getString(if (isStaffMode) R.string.staff_faces_empty else R.string.students_empty)
         }
         binding.emptyState.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
         binding.studentsList.visibility = if (filtered.isEmpty()) View.GONE else View.VISIBLE

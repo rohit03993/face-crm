@@ -3,7 +3,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,10 @@ def bulk_sync_students(
 
 @router.get("", response_model=list[StudentListItem])
 def list_students(
+    subject: str | None = Query(
+        default=None,
+        description="Filter by subject: student | staff. Omit to return all.",
+    ),
     db: Session = Depends(get_db),
     auth=Depends(require_crm_or_device),
 ) -> list[StudentListItem]:
@@ -65,6 +69,9 @@ def list_students(
         q = q.filter(Student.tenant_id == device.tenant_id)
     elif tenant is not None:
         q = q.filter(Student.tenant_id == tenant.id)
+    subject_norm = _normalize_subject(subject) if subject else None
+    if subject_norm:
+        q = q.filter(Student.subject == subject_norm)
     students = q.order_by(Student.enrollment_number.asc()).all()
     items: list[StudentListItem] = []
     for student in students:
@@ -85,13 +92,28 @@ def list_students(
                 enrolled=template is not None,
                 image_count=template.image_count if template else 0,
                 has_face_photo=_student_has_face_photo(db, student.id),
+                subject=getattr(student, "subject", None) or "student",
             )
         )
     return items
 
 
+def _normalize_subject(value: str | None) -> str:
+    raw = (value or "student").strip().lower()
+    if raw in {"staff", "teacher", "employee"}:
+        return "staff"
+    return "student"
+
+
 def _upsert_student(body: StudentCreate, db: Session, *, tenant_id: str) -> Student:
     enrollment = body.enrollment_number.strip().upper()
+    subject = _normalize_subject(body.subject)
+    # Prefer explicit subject; also treat CRM staff ids like "staff:123"
+    if body.crm_student_id and str(body.crm_student_id).startswith("staff:"):
+        subject = "staff"
+    if body.crm_user_id and subject == "student" and body.subject and body.subject.lower() == "staff":
+        subject = "staff"
+
     existing = None
     if body.id:
         existing = db.get(Student, body.id)
@@ -108,16 +130,24 @@ def _upsert_student(body: StudentCreate, db: Session, *, tenant_id: str) -> Stud
         existing.name = body.name
         existing.batch = body.batch
         existing.enrollment_number = enrollment
+        existing.subject = subject
         if body.crm_student_id:
             existing.crm_student_id = body.crm_student_id
+        elif body.crm_user_id and subject == "staff":
+            existing.crm_student_id = f"staff:{body.crm_user_id}"
         return existing
+
+    crm_id = body.crm_student_id
+    if not crm_id and body.crm_user_id and subject == "staff":
+        crm_id = f"staff:{body.crm_user_id}"
 
     student = Student(
         tenant_id=tenant_id,
         enrollment_number=enrollment,
         name=body.name,
         batch=body.batch,
-        crm_student_id=body.crm_student_id,
+        crm_student_id=crm_id,
+        subject=subject,
     )
     if body.id:
         student.id = body.id

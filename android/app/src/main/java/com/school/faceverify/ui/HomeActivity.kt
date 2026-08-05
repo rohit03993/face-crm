@@ -37,7 +37,11 @@ class HomeActivity : AppCompatActivity() {
         }
         binding.cardStudents.setOnClickListener {
             if (!ensureModelReadyOrToast()) return@setOnClickListener
-            startActivity(Intent(this, StudentsActivity::class.java))
+            startActivity(StudentsActivity.intentFor(this, StudentsActivity.SUBJECT_STUDENT))
+        }
+        binding.cardStaffFaces.setOnClickListener {
+            if (!ensureModelReadyOrToast()) return@setOnClickListener
+            startActivity(StudentsActivity.intentFor(this, StudentsActivity.SUBJECT_STAFF))
         }
         binding.btnStaffUsers.setOnClickListener {
             startActivity(Intent(this, StaffUsersActivity::class.java))
@@ -133,6 +137,7 @@ class HomeActivity : AppCompatActivity() {
             binding.modelDownloadPanel.visibility = View.GONE
             binding.cardAttendance.isEnabled = true
             binding.cardStudents.isEnabled = true
+            binding.cardStaffFaces.isEnabled = true
             return
         }
         if (modelJob?.isActive == true) return
@@ -142,6 +147,7 @@ class HomeActivity : AppCompatActivity() {
         binding.modelDownloadProgress.progress = 0
         binding.cardAttendance.isEnabled = false
         binding.cardStudents.isEnabled = false
+        binding.cardStaffFaces.isEnabled = false
 
         modelJob = lifecycleScope.launch {
             try {
@@ -152,6 +158,7 @@ class HomeActivity : AppCompatActivity() {
                     binding.modelDownloadStatus.text = getString(R.string.face_url_required)
                     binding.cardAttendance.isEnabled = false
                     binding.cardStudents.isEnabled = false
+                    binding.cardStaffFaces.isEnabled = false
                     return@launch
                 }
                 withContext(Dispatchers.IO) {
@@ -168,12 +175,14 @@ class HomeActivity : AppCompatActivity() {
                 binding.modelDownloadPanel.visibility = View.GONE
                 binding.cardAttendance.isEnabled = true
                 binding.cardStudents.isEnabled = true
+                binding.cardStaffFaces.isEnabled = true
             } catch (e: Exception) {
                 modelReady = false
                 binding.modelDownloadStatus.text =
                     getString(R.string.model_download_failed, e.message ?: "error")
                 binding.cardAttendance.isEnabled = false
                 binding.cardStudents.isEnabled = false
+                binding.cardStaffFaces.isEnabled = false
                 Toast.makeText(this@HomeActivity, e.message, Toast.LENGTH_LONG).show()
             }
         }
@@ -183,8 +192,12 @@ class HomeActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val client = FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
                 val students = withContext(Dispatchers.IO) {
-                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).listStudents()
+                    client.listStudents(StudentsActivity.SUBJECT_STUDENT)
+                }
+                val staff = withContext(Dispatchers.IO) {
+                    client.listStudents(StudentsActivity.SUBJECT_STAFF)
                 }
                 val ready = students.count { it.enrolled }
                 val missing = students.size - ready
@@ -194,8 +207,17 @@ class HomeActivity : AppCompatActivity() {
                     missing,
                     students.size,
                 )
+                val staffReady = staff.count { it.enrolled }
+                val staffMissing = staff.size - staffReady
+                binding.staffFacesSummary.text = getString(
+                    R.string.staff_faces_summary,
+                    staffReady,
+                    staffMissing,
+                    staff.size,
+                )
             } catch (_: Exception) {
                 binding.studentsSummary.text = getString(R.string.students_menu_hint)
+                binding.staffFacesSummary.text = getString(R.string.staff_faces_menu_hint)
             }
         }
     }

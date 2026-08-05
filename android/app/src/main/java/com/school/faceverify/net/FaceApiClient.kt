@@ -33,6 +33,7 @@ data class StudentListItem(
     val enrolled: Boolean,
     val imageCount: Int,
     val hasFacePhoto: Boolean = false,
+    val subject: String = "student",
 )
 
 sealed class DeviceAuthResult {
@@ -76,9 +77,14 @@ class FaceApiClient(
 
     private val base get() = apiBaseUrl.trimEnd('/')
 
-    fun listStudents(): List<StudentListItem> {
+    fun listStudents(subject: String? = null): List<StudentListItem> {
+        val url = if (subject.isNullOrBlank()) {
+            "$base/students"
+        } else {
+            "$base/students?subject=${java.net.URLEncoder.encode(subject, "UTF-8")}"
+        }
         val request = Request.Builder()
-            .url("$base/students")
+            .url(url)
             .header("Authorization", "Bearer $deviceToken")
             .get()
             .build()
@@ -100,6 +106,7 @@ class FaceApiClient(
                             enrolled = json.optBoolean("enrolled", false),
                             imageCount = json.optInt("image_count", 0),
                             hasFacePhoto = json.optBoolean("has_face_photo", false),
+                            subject = json.optString("subject", "student").ifBlank { "student" },
                         ),
                     )
                 }

@@ -200,6 +200,45 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardStaffFaces"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardBackgroundColor="@color/ink_soft"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:rippleColor="@color/teal_bright"
+            app:strokeColor="@color/slate"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="22dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/staff_faces_menu"
+                    android:textColor="@color/mist"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/staffFacesSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/staff_faces_menu_hint"
+                    android:textColor="@color/mist_dim"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStaffUsers"
             style="@style/Widget.FaceVerify.Button.Ghost"

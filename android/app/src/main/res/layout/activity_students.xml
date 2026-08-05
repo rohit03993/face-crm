@@ -29,6 +29,7 @@
                 android:text="@string/back" />
 
             <TextView
+                android:id="@+id/screenTitle"
                 style="@style/Text.FaceVerify.Brand"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -66,6 +67,7 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/crmHint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingHorizontal="20dp"

@@ -84,6 +84,8 @@ class Student(Base):
     name: Mapped[str] = mapped_column(String(255))
     batch: Mapped[str | None] = mapped_column(String(128), nullable=True)
     crm_student_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # "student" (default) or "staff" — same table/pipeline, separate CRM/kiosk sections
+    subject: Mapped[str] = mapped_column(String(16), default="student", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -373,9 +373,11 @@ class StudentsActivity : AppCompatActivity() {
         updatingBatchSpinner = true
         binding.batchSpinner.adapter = ArrayAdapter(
             this,
-            android.R.layout.simple_spinner_dropdown_item,
+            R.layout.item_batch_spinner,
             batchLabels,
-        )
+        ).also { adapter ->
+            adapter.setDropDownViewResource(R.layout.item_batch_spinner_dropdown)
+        }
         val index = previous?.let { batches.indexOf(it) }?.takeIf { it >= 0 }?.plus(1) ?: 0
         selectedBatch = if (index > 0) batches[index - 1] else null
         binding.batchSpinner.setSelection(index, false)

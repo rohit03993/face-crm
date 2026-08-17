@@ -105,9 +105,10 @@
             android:layout_height="48dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="10dp"
-            android:background="@drawable/bg_connection_pill"
+            android:background="@drawable/bg_batch_spinner"
             android:paddingHorizontal="12dp"
-            android:popupBackground="@color/ink_soft" />
+            android:popupBackground="@color/ink_soft"
+            android:spinnerMode="dropdown" />
 
         <HorizontalScrollView
             android:layout_width="match_parent"

@@ -61,7 +61,7 @@ class StudentDetailActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val session = FaceVerifyApp.instance.settings.currentSession()
                 if (!session.isAdmin) {
-                    Toast.makeText(this@StudentDetailActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@StudentDetailActivity, R.string.admin_only_delete, Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 showEditDetailsDialog()
@@ -179,7 +179,7 @@ class StudentDetailActivity : AppCompatActivity() {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 val session = FaceVerifyApp.instance.settings.currentSession()
                 if (!session.isAdmin || session.userToken.isBlank()) {
-                    Toast.makeText(this@StudentDetailActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@StudentDetailActivity, R.string.admin_only_delete, Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val (ok, body) = withContext(Dispatchers.IO) {

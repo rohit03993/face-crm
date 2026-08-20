@@ -52,6 +52,7 @@ class StudentsActivity : AppCompatActivity() {
     private val adapter = StudentAdapter(
         onOpenProfile = { openProfile(it) },
         onAddFace = { openAddFace(it) },
+        onDelete = { requireAdmin { confirmDelete(it) } },
         onMore = { showMoreOptions(it) },
         photoLoader = { imageView, item -> loadStudentPhoto(imageView, item) },
     )
@@ -63,6 +64,7 @@ class StudentsActivity : AppCompatActivity() {
     private var selectedBatch: String? = null
     private var batchLabels = listOf<String>()
     private var updatingBatchSpinner = false
+    private var isAdminUser = false
 
     private enum class FaceFilter { ALL, MISSING, READY }
 
@@ -162,7 +164,7 @@ class StudentsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val session = FaceVerifyApp.instance.settings.currentSession()
             if (!session.isAdmin) {
-                Toast.makeText(this@StudentsActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@StudentsActivity, R.string.admin_only_delete, Toast.LENGTH_LONG).show()
                 return@launch
             }
             action()
@@ -214,23 +216,76 @@ class StudentsActivity : AppCompatActivity() {
 
     private fun showMoreOptions(item: StudentListItem) {
         if (!requireOnline()) return
-        AlertDialog.Builder(this)
-            .setTitle(item.name)
-            .setItems(
+        lifecycleScope.launch {
+            val session = FaceVerifyApp.instance.settings.currentSession()
+            val options = if (session.isAdmin) {
                 arrayOf(
                     getString(R.string.edit_details),
                     if (item.enrolled) getString(R.string.update_face) else getString(R.string.add_face),
+                    getString(R.string.clear_face_only),
                     getString(R.string.delete_student),
-                ),
-            ) { _, which ->
-                when (which) {
-                    0 -> requireAdmin { showEditDetailsDialog(item) }
-                    1 -> openAddFace(item)
-                    2 -> requireAdmin { confirmDelete(item) }
-                }
+                )
+            } else {
+                arrayOf(
+                    if (item.enrolled) getString(R.string.update_face) else getString(R.string.add_face),
+                )
             }
+            AlertDialog.Builder(this@StudentsActivity)
+                .setTitle(item.name)
+                .setItems(options) { _, which ->
+                    if (session.isAdmin) {
+                        when (which) {
+                            0 -> showEditDetailsDialog(item)
+                            1 -> openAddFace(item)
+                            2 -> confirmClearFace(item)
+                            3 -> confirmDelete(item)
+                        }
+                    } else {
+                        openAddFace(item)
+                    }
+                }
+                .setNegativeButton(R.string.back, null)
+                .show()
+        }
+    }
+
+    private fun confirmClearFace(item: StudentListItem) {
+        if (!requireOnline()) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.clear_face_title)
+            .setMessage(getString(R.string.clear_face_message, item.name, item.enrollmentNumber))
+            .setPositiveButton(R.string.clear_face_only) { _, _ -> clearFace(item) }
             .setNegativeButton(R.string.back, null)
             .show()
+    }
+
+    private fun clearFace(item: StudentListItem) {
+        lifecycleScope.launch {
+            try {
+                val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val session = FaceVerifyApp.instance.settings.currentSession()
+                if (!session.isAdmin || session.userToken.isBlank()) {
+                    Toast.makeText(this@StudentsActivity, R.string.admin_only_delete, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                val (ok, body) = withContext(Dispatchers.IO) {
+                    FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken)
+                        .clearStudentFace(item.id, session.userToken)
+                }
+                if (ok) {
+                    Toast.makeText(this@StudentsActivity, R.string.face_cleared, Toast.LENGTH_SHORT).show()
+                    refresh()
+                } else {
+                    Toast.makeText(
+                        this@StudentsActivity,
+                        body.take(120).ifBlank { "Clear face failed" },
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@StudentsActivity, e.message, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun showEditDetailsDialog(item: StudentListItem) {
@@ -262,7 +317,7 @@ class StudentsActivity : AppCompatActivity() {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 val session = FaceVerifyApp.instance.settings.currentSession()
                 if (!session.isAdmin || session.userToken.isBlank()) {
-                    Toast.makeText(this@StudentsActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@StudentsActivity, R.string.admin_only_delete, Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val (ok, body) = withContext(Dispatchers.IO) {
@@ -307,7 +362,7 @@ class StudentsActivity : AppCompatActivity() {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
                 val session = FaceVerifyApp.instance.settings.currentSession()
                 if (!session.isAdmin || session.userToken.isBlank()) {
-                    Toast.makeText(this@StudentsActivity, R.string.admin_only, Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@StudentsActivity, R.string.admin_only_delete, Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 val (ok, body) = withContext(Dispatchers.IO) {
@@ -339,6 +394,9 @@ class StudentsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val cfg = FaceVerifyApp.instance.settings.configFlow.first()
+                val session = FaceVerifyApp.instance.settings.currentSession()
+                isAdminUser = session.isAdmin
+                adapter.isAdmin = isAdminUser
                 val students = withContext(Dispatchers.IO) {
                     FaceApiClient(cfg.apiBaseUrl, cfg.deviceToken).listStudents(listSubject)
                 }
@@ -415,7 +473,8 @@ class StudentsActivity : AppCompatActivity() {
                 item.batch?.trim().equals(batch, ignoreCase = true) == true
             val matchesQuery = query.isEmpty() ||
                 item.name.lowercase().contains(query) ||
-                item.enrollmentNumber.lowercase().contains(query)
+                item.enrollmentNumber.lowercase().contains(query) ||
+                item.batch?.lowercase()?.contains(query) == true
             matchesFilter && matchesBatch && matchesQuery
         }
         adapter.submitList(filtered)
@@ -439,16 +498,24 @@ class StudentsActivity : AppCompatActivity() {
     private class StudentAdapter(
         private val onOpenProfile: (StudentListItem) -> Unit,
         private val onAddFace: (StudentListItem) -> Unit,
+        private val onDelete: (StudentListItem) -> Unit,
         private val onMore: (StudentListItem) -> Unit,
         private val photoLoader: (android.widget.ImageView, StudentListItem) -> Unit,
     ) : ListAdapter<StudentListItem, StudentAdapter.Holder>(DIFF) {
+        var isAdmin: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                notifyDataSetChanged()
+            }
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val binding = ItemStudentBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            return Holder(binding, onOpenProfile, onAddFace, onMore, photoLoader)
+            return Holder(binding, onOpenProfile, onAddFace, onDelete, onMore, photoLoader)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
-            holder.bind(getItem(position))
+            holder.bind(getItem(position), isAdmin)
         }
 
         override fun onViewRecycled(holder: Holder) {
@@ -460,6 +527,7 @@ class StudentsActivity : AppCompatActivity() {
             private val binding: ItemStudentBinding,
             private val onOpenProfile: (StudentListItem) -> Unit,
             private val onAddFace: (StudentListItem) -> Unit,
+            private val onDelete: (StudentListItem) -> Unit,
             private val onMore: (StudentListItem) -> Unit,
             private val photoLoader: (android.widget.ImageView, StudentListItem) -> Unit,
         ) : RecyclerView.ViewHolder(binding.root) {
@@ -467,7 +535,7 @@ class StudentsActivity : AppCompatActivity() {
                 FacePhotoLoader.cancel(binding.studentPhoto)
             }
 
-            fun bind(item: StudentListItem) {
+            fun bind(item: StudentListItem, isAdmin: Boolean) {
                 val ctx = binding.root.context
                 binding.studentName.text = item.name
                 binding.studentRoll.text = item.enrollmentNumber
@@ -486,8 +554,10 @@ class StudentsActivity : AppCompatActivity() {
                     binding.btnFaceAction.text = ctx.getString(R.string.add_face)
                 }
 
+                binding.btnDelete.visibility = if (isAdmin) View.VISIBLE else View.GONE
                 photoLoader(binding.studentPhoto, item)
                 binding.btnFaceAction.setOnClickListener { onAddFace(item) }
+                binding.btnDelete.setOnClickListener { onDelete(item) }
                 binding.btnMore.setOnClickListener { onMore(item) }
                 binding.root.setOnClickListener { onOpenProfile(item) }
                 binding.studentPhoto.setOnClickListener { onOpenProfile(item) }

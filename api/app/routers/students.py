@@ -18,12 +18,18 @@ from app.schemas import (
     EnrollTemplateIn,
     FaceCheckIn,
     FaceCheckOut,
+    StudentBulkRemoveIn,
+    StudentBulkRemoveOut,
     StudentBulkSyncIn,
     StudentBulkSyncOut,
     StudentCreate,
     StudentListItem,
     StudentOut,
+    StudentRemoveByEnrollmentIn,
+    StudentRemoveOut,
     StudentUpdate,
+    SyncHealthOut,
+    SyncHealthPerson,
 )
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -48,10 +54,25 @@ def bulk_sync_students(
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(require_tenant_crm),
 ) -> StudentBulkSyncOut:
+    created = 0
+    updated = 0
+    skipped = 0
     for student in body.students:
-        _upsert_student(student, db, tenant_id=tenant.id)
+        existing_before = _find_existing_student(student, db, tenant_id=tenant.id)
+        row = _upsert_student(student, db, tenant_id=tenant.id)
+        if existing_before is None:
+            created += 1
+        elif row is existing_before:
+            updated += 1
+        else:
+            skipped += 1
     db.commit()
-    return StudentBulkSyncOut(synced=len(body.students))
+    return StudentBulkSyncOut(
+        synced=len(body.students),
+        created=created,
+        updated=updated,
+        skipped=skipped,
+    )
 
 
 @router.get("", response_model=list[StudentListItem])
@@ -98,11 +119,208 @@ def list_students(
     return items
 
 
+@router.get("/sync-health", response_model=SyncHealthOut)
+def sync_health(
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device_admin),
+) -> SyncHealthOut:
+    """Admin: student vs staff counts + likely orphans (missing CRM id)."""
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+    rows = db.query(Student).filter(Student.tenant_id == tenant_id).all()
+    student_count = 0
+    staff_count = 0
+    orphans: list[SyncHealthPerson] = []
+    for student in rows:
+        subject = getattr(student, "subject", None) or "student"
+        if subject == "staff":
+            staff_count += 1
+        else:
+            student_count += 1
+        template = (
+            db.query(FaceTemplate)
+            .filter(
+                FaceTemplate.student_id == student.id,
+                FaceTemplate.model_version == settings.face_model_version,
+            )
+            .first()
+        )
+        reasons: list[str] = []
+        if not student.crm_student_id:
+            reasons.append("missing_crm_id")
+        if subject == "staff" and student.crm_student_id and not str(
+            student.crm_student_id
+        ).startswith("staff:"):
+            reasons.append("staff_without_staff_crm_prefix")
+        if reasons:
+            orphans.append(
+                SyncHealthPerson(
+                    id=student.id,
+                    enrollment_number=student.enrollment_number,
+                    name=student.name,
+                    batch=student.batch,
+                    subject=subject,
+                    crm_student_id=student.crm_student_id,
+                    enrolled=template is not None,
+                    reason=",".join(reasons),
+                )
+            )
+    orphans.sort(key=lambda p: (p.subject, p.enrollment_number))
+    return SyncHealthOut(
+        student_count=student_count,
+        staff_count=staff_count,
+        total_count=len(rows),
+        missing_crm_id_count=sum(1 for o in orphans if "missing_crm_id" in o.reason),
+        orphans=orphans,
+    )
+
+
+@router.get("/roster.csv")
+def roster_csv(
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device_admin),
+):
+    """Admin: export Face roster for CRM diff (enrollment, subject, name, batch)."""
+    import csv
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+    rows = (
+        db.query(Student)
+        .filter(Student.tenant_id == tenant_id)
+        .order_by(Student.subject.asc(), Student.enrollment_number.asc())
+        .all()
+    )
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "enrollment_number",
+            "subject",
+            "name",
+            "batch",
+            "crm_student_id",
+            "enrolled",
+            "face_id",
+        ]
+    )
+    for student in rows:
+        enrolled = (
+            db.query(FaceTemplate)
+            .filter(
+                FaceTemplate.student_id == student.id,
+                FaceTemplate.model_version == settings.face_model_version,
+            )
+            .first()
+            is not None
+        )
+        writer.writerow(
+            [
+                student.enrollment_number,
+                getattr(student, "subject", None) or "student",
+                student.name,
+                student.batch or "",
+                student.crm_student_id or "",
+                "yes" if enrolled else "no",
+                student.id,
+            ]
+        )
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="face-roster.csv"'},
+    )
+
+
+@router.post("/remove-by-enrollment", response_model=StudentRemoveOut)
+def remove_by_enrollment(
+    body: StudentRemoveByEnrollmentIn,
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device_admin),
+) -> StudentRemoveOut:
+    """CRM-safe delete by roll. Idempotent. Will not delete staff when subject=student."""
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+    enr = body.enrollment_number.strip().upper()
+    want_subject = _normalize_subject(body.subject)
+    student = (
+        db.query(Student)
+        .filter(
+            Student.tenant_id == tenant_id,
+            Student.enrollment_number == enr,
+            Student.subject == want_subject,
+        )
+        .first()
+    )
+    if not student:
+        return StudentRemoveOut(ok=True, deleted=None, already_gone=True)
+    sid = student.id
+    _delete_student_cascade(db, student)
+    db.commit()
+    return StudentRemoveOut(ok=True, deleted=sid, already_gone=False)
+
+
+@router.post("/bulk-remove", response_model=StudentBulkRemoveOut)
+def bulk_remove_students(
+    body: StudentBulkRemoveIn,
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device_admin),
+) -> StudentBulkRemoveOut:
+    """Admin: delete selected Face people (orphan cleanup)."""
+    tenant_id = _tenant_id_from_auth(auth)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="School context required")
+    deleted = 0
+    missing = 0
+    for sid in body.student_ids:
+        student = db.get(Student, sid.strip())
+        if not student or student.tenant_id != tenant_id:
+            missing += 1
+            continue
+        _delete_student_cascade(db, student)
+        deleted += 1
+    db.commit()
+    return StudentBulkRemoveOut(ok=True, deleted=deleted, missing=missing)
+
+
 def _normalize_subject(value: str | None) -> str:
     raw = (value or "student").strip().lower()
     if raw in {"staff", "teacher", "employee"}:
         return "staff"
     return "student"
+
+
+def _find_existing_student(body: StudentCreate, db: Session, *, tenant_id: str) -> Student | None:
+    if body.id:
+        existing = db.get(Student, body.id)
+        if existing and existing.tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail="Student belongs to another school")
+        if existing:
+            return existing
+    crm_id = (body.crm_student_id or "").strip() or None
+    if not crm_id and body.crm_user_id and _normalize_subject(body.subject) == "staff":
+        crm_id = f"staff:{body.crm_user_id}"
+    if crm_id:
+        by_crm = (
+            db.query(Student)
+            .filter(Student.tenant_id == tenant_id, Student.crm_student_id == crm_id)
+            .first()
+        )
+        if by_crm:
+            return by_crm
+    enrollment = body.enrollment_number.strip().upper()
+    return (
+        db.query(Student)
+        .filter(Student.tenant_id == tenant_id, Student.enrollment_number == enrollment)
+        .first()
+    )
 
 
 def _upsert_student(body: StudentCreate, db: Session, *, tenant_id: str) -> Student:
@@ -114,17 +332,7 @@ def _upsert_student(body: StudentCreate, db: Session, *, tenant_id: str) -> Stud
     if body.crm_user_id and subject == "student" and body.subject and body.subject.lower() == "staff":
         subject = "staff"
 
-    existing = None
-    if body.id:
-        existing = db.get(Student, body.id)
-        if existing and existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Student belongs to another school")
-    if existing is None:
-        existing = (
-            db.query(Student)
-            .filter(Student.tenant_id == tenant_id, Student.enrollment_number == enrollment)
-            .first()
-        )
+    existing = _find_existing_student(body, db, tenant_id=tenant_id)
 
     if existing:
         existing.name = body.name
@@ -250,6 +458,8 @@ def _apply_student_update(student: Student, body: StudentUpdate, db: Session) ->
         student.name = body.name.strip()
     if body.batch is not None:
         student.batch = body.batch.strip() or None
+    if body.subject is not None:
+        student.subject = _normalize_subject(body.subject)
     if body.enrollment_number is not None:
         new_enr = body.enrollment_number.strip().upper()
         clash = (
@@ -500,17 +710,39 @@ def update_student_post(
     return student
 
 
-@router.post("/{student_id}/remove", status_code=status.HTTP_200_OK)
+@router.post("/{student_id}/remove", response_model=StudentRemoveOut)
 def remove_student_post(
     student_id: str,
     db: Session = Depends(get_db),
     auth=Depends(require_crm_or_device_admin),
-) -> dict:
-    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
+) -> StudentRemoveOut:
+    tenant_id = _tenant_id_from_auth(auth)
+    student = db.get(Student, student_id)
+    if student is None:
+        enr = student_id.strip().upper()
+        q = db.query(Student).filter(Student.enrollment_number == enr)
+        if tenant_id:
+            q = q.filter(Student.tenant_id == tenant_id)
+        student = q.first()
+    if not student or (tenant_id and student.tenant_id != tenant_id):
+        return StudentRemoveOut(ok=True, deleted=None, already_gone=True)
     sid = student.id
     _delete_student_cascade(db, student)
     db.commit()
-    return {"ok": True, "deleted": sid}
+    return StudentRemoveOut(ok=True, deleted=sid, already_gone=False)
+
+
+@router.post("/{student_id}/clear-face", status_code=status.HTTP_200_OK)
+def clear_student_face(
+    student_id: str,
+    db: Session = Depends(get_db),
+    auth=Depends(require_crm_or_device_admin),
+) -> dict:
+    """Admin: remove face photos/templates but keep the roster row for CRM re-enroll."""
+    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
+    _clear_face_data(db, student.id)
+    db.commit()
+    return {"ok": True, "student_id": student.id, "cleared": True}
 
 
 @router.get("/{student_id}", response_model=StudentOut)
@@ -567,15 +799,13 @@ def update_student(
     return student
 
 
-@router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{student_id}", response_model=StudentRemoveOut)
 def delete_student(
     student_id: str,
     db: Session = Depends(get_db),
     auth=Depends(require_crm_or_device_admin),
-) -> None:
-    student = _resolve_student(db, student_id, tenant_id=_tenant_id_from_auth(auth))
-    _delete_student_cascade(db, student)
-    db.commit()
+) -> StudentRemoveOut:
+    return remove_student_post(student_id, db, auth)
 
 
 @router.post("/{student_id}/enroll-template", response_model=EnrollResponse)

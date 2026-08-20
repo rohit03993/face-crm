@@ -240,11 +240,20 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnStaffUsers"
+            android:id="@+id/btnSyncHealth"
             style="@style/Widget.FaceVerify.Button.Ghost"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            android:text="@string/sync_health_title"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStaffUsers"
+            style="@style/Widget.FaceVerify.Button.Ghost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:text="@string/staff_manage_title"
             android:visibility="gone" />
 

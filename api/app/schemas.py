@@ -60,6 +60,49 @@ class StudentBulkSyncIn(BaseModel):
 
 class StudentBulkSyncOut(BaseModel):
     synced: int
+    created: int = 0
+    updated: int = 0
+    skipped: int = 0
+
+
+class StudentRemoveByEnrollmentIn(BaseModel):
+    enrollment_number: str = Field(..., min_length=1, max_length=64)
+    subject: str | None = Field(default="student", max_length=16)
+
+
+class StudentRemoveOut(BaseModel):
+    ok: bool = True
+    deleted: str | None = None
+    already_gone: bool = False
+
+
+class StudentBulkRemoveIn(BaseModel):
+    student_ids: list[str] = Field(..., min_length=1, max_length=500)
+
+
+class StudentBulkRemoveOut(BaseModel):
+    ok: bool = True
+    deleted: int
+    missing: int = 0
+
+
+class SyncHealthPerson(BaseModel):
+    id: str
+    enrollment_number: str
+    name: str
+    batch: str | None = None
+    subject: str = "student"
+    crm_student_id: str | None = None
+    enrolled: bool = False
+    reason: str
+
+
+class SyncHealthOut(BaseModel):
+    student_count: int
+    staff_count: int
+    total_count: int
+    missing_crm_id_count: int
+    orphans: list[SyncHealthPerson]
 
 
 class EmbeddingOut(BaseModel):

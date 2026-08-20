@@ -36,6 +36,25 @@ data class StudentListItem(
     val subject: String = "student",
 )
 
+data class SyncHealthOrphan(
+    val id: String,
+    val enrollmentNumber: String,
+    val name: String,
+    val batch: String?,
+    val subject: String,
+    val crmStudentId: String?,
+    val enrolled: Boolean,
+    val reason: String,
+)
+
+data class SyncHealthResult(
+    val studentCount: Int,
+    val staffCount: Int,
+    val totalCount: Int,
+    val missingCrmIdCount: Int,
+    val orphans: List<SyncHealthOrphan>,
+)
+
 sealed class DeviceAuthResult {
     data object Ok : DeviceAuthResult()
     data object Offline : DeviceAuthResult()
@@ -348,6 +367,82 @@ class FaceApiClient(
         client.newCall(request).execute().use { resp ->
             val raw = resp.body?.string().orEmpty()
             return (resp.isSuccessful || resp.code == 204) to friendlyError(resp.code, raw)
+        }
+    }
+
+    fun clearStudentFace(studentId: String, userToken: String): Pair<Boolean, String> {
+        val encodedId = encodePath(studentId)
+        val request = Request.Builder()
+            .url("$base/students/$encodedId/clear-face")
+            .header("Authorization", "Bearer $deviceToken")
+            .header("X-User-Token", userToken.trim())
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            return resp.isSuccessful to friendlyError(resp.code, raw)
+        }
+    }
+
+    fun syncHealth(userToken: String): SyncHealthResult {
+        val request = Request.Builder()
+            .url("$base/students/sync-health")
+            .header("Authorization", "Bearer $deviceToken")
+            .header("X-User-Token", userToken.trim())
+            .get()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw IOException(friendlyError(resp.code, raw))
+            val json = JSONObject(raw)
+            val orphansJson = json.optJSONArray("orphans") ?: JSONArray()
+            val orphans = buildList {
+                for (i in 0 until orphansJson.length()) {
+                    val o = orphansJson.getJSONObject(i)
+                    add(
+                        SyncHealthOrphan(
+                            id = o.optString("id"),
+                            enrollmentNumber = o.optString("enrollment_number"),
+                            name = o.optString("name"),
+                            batch = o.optStringOrNull("batch"),
+                            subject = o.optString("subject", "student"),
+                            crmStudentId = o.optStringOrNull("crm_student_id"),
+                            enrolled = o.optBoolean("enrolled", false),
+                            reason = o.optString("reason"),
+                        ),
+                    )
+                }
+            }
+            return SyncHealthResult(
+                studentCount = json.optInt("student_count", 0),
+                staffCount = json.optInt("staff_count", 0),
+                totalCount = json.optInt("total_count", 0),
+                missingCrmIdCount = json.optInt("missing_crm_id_count", 0),
+                orphans = orphans,
+            )
+        }
+    }
+
+    fun bulkRemoveStudents(studentIds: List<String>, userToken: String): Pair<Boolean, String> {
+        val payload = JSONObject().put(
+            "student_ids",
+            JSONArray().apply { studentIds.forEach { put(it) } },
+        )
+        val request = Request.Builder()
+            .url("$base/students/bulk-remove")
+            .header("Authorization", "Bearer $deviceToken")
+            .header("X-User-Token", userToken.trim())
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val raw = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) return false to friendlyError(resp.code, raw)
+            val deleted = try {
+                JSONObject(raw).optInt("deleted", 0)
+            } catch (_: Exception) {
+                0
+            }
+            return true to deleted.toString()
         }
     }
 

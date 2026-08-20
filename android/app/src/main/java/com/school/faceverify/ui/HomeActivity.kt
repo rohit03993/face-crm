@@ -43,6 +43,9 @@ class HomeActivity : AppCompatActivity() {
             if (!ensureModelReadyOrToast()) return@setOnClickListener
             startActivity(StudentsActivity.intentFor(this, StudentsActivity.SUBJECT_STAFF))
         }
+        binding.btnSyncHealth.setOnClickListener {
+            startActivity(Intent(this, SyncHealthActivity::class.java))
+        }
         binding.btnStaffUsers.setOnClickListener {
             startActivity(Intent(this, StaffUsersActivity::class.java))
         }
@@ -93,6 +96,7 @@ class HomeActivity : AppCompatActivity() {
             session.role.replaceFirstChar { it.uppercase() },
         )
         binding.cardStudents.visibility = View.VISIBLE
+        binding.btnSyncHealth.visibility = if (session.isAdmin) View.VISIBLE else View.GONE
         binding.btnStaffUsers.visibility = if (session.isAdmin) View.VISIBLE else View.GONE
         binding.btnSettings.visibility = if (session.isAdmin) View.VISIBLE else View.GONE
         binding.btnLogout.visibility = View.VISIBLE
